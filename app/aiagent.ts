@@ -1,4 +1,4 @@
-import { query } from "@/lib/db";
+import { query } from "@/lib/db-aurora";
 
 export async function aiFunction(messyPrompt: string) {
   // 1. Grab the first 3 rows from your neighborhood table

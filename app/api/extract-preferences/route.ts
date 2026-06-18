@@ -11,6 +11,7 @@ type ExtractPreferencesRequest = Partial<
   PreferenceExtractionInput & {
     sourceNeighborhoodName: string;
     sourceCityName: string;
+    destinationCitySlug: string;
   }
 >;
 
@@ -24,14 +25,14 @@ function parseRequestBody(body: ExtractPreferencesRequest) {
     readString(body.sourceNeighborhoodName);
   const sourceCity =
     readString(body.sourceCity) || readString(body.sourceCityName);
+  const destinationCity =
+    readString(body.destinationCity) || readString(body.destinationCitySlug);
   const likes = readString(body.likes);
   const dislikes = readString(body.dislikes);
 
   const missing = [
     ["sourceNeighborhood", sourceNeighborhood],
-    ["sourceCity", sourceCity],
     ["likes", likes],
-    ["dislikes", dislikes],
   ]
     .filter(([, value]) => !value)
     .map(([key]) => key);
@@ -46,6 +47,7 @@ function parseRequestBody(body: ExtractPreferencesRequest) {
     data: {
       sourceNeighborhood,
       sourceCity,
+      destinationCity,
       likes,
       dislikes,
     } satisfies PreferenceExtractionInput,

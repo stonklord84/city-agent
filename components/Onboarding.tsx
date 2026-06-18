@@ -56,9 +56,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
 
   // Form State
   const [sourceNeighborhood, setSourceNeighborhood] = useState("");
-  const [sourceCity, setSourceCity] = useState("");
   const [likes, setLikes] = useState("");
-  const [dislikes, setDislikes] = useState("");
   const [destCitySlug, setDestCitySlug] = useState("nyc");
   
   // Budget values
@@ -74,9 +72,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   };
 
   const nextStep = () => {
-    if (step === 1 && (!sourceNeighborhood.trim() || !sourceCity.trim())) return;
-    if (step === 2 && !likes.trim()) return;
-    if (step === 3 && !dislikes.trim()) return;
+    if (step === 2 && (!sourceNeighborhood.trim() || !likes.trim())) return;
     setStep((prev) => prev + 1);
   };
 
@@ -93,9 +89,8 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sourceNeighborhood,
-          sourceCity,
+          destinationCity: destCitySlug,
           likes,
-          dislikes,
         }),
       });
 
@@ -106,7 +101,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
 
       // 2. Save in client local storage
       const sessionData = {
-        source: { sourceNeighborhood, sourceCity, likes, dislikes },
+        source: { sourceNeighborhood, sourceCity: "", likes, dislikes: "" },
         preferences: extractedPrefs,
         budgetMin,
         budgetMax,
@@ -124,7 +119,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
       console.error(err);
       // Fallback preferences in case of failure (neutral 0.5 vector)
       const sessionData = {
-        source: { sourceNeighborhood, sourceCity, likes, dislikes },
+        source: { sourceNeighborhood, sourceCity: "", likes, dislikes: "" },
         preferences: {
           walkability: 0.5,
           transit: 0.5,
@@ -148,7 +143,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   };
 
   // Helper for progress bar
-  const percent = Math.round(((step - 1) / 4) * 100);
+  const percent = Math.round(((step - 1) / 2) * 100);
 
   return (
     <div className="w-full max-w-2xl mx-auto bg-white border border-slate-200 rounded-3xl p-8 shadow-soft-xl relative overflow-hidden transition-all duration-500">
@@ -161,88 +156,16 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
       </div>
 
       <div className="min-h-[360px] flex flex-col justify-between">
-        {/* STEP 1: Current Location */}
+        {/* STEP 1: Destination City */}
         {step === 1 && (
           <div className="animate-fadeIn">
-            <span className="text-blue-600 text-xs font-semibold uppercase tracking-wider">Step 1 of 5</span>
-            <h2 className="text-3xl font-light text-slate-900 mt-2 mb-6">
-              Where do you currently live?
-            </h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-slate-600 text-sm mb-1.5 font-medium">Neighborhood</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Williamsburg, Koramangala, Hyde Park"
-                  value={sourceNeighborhood}
-                  onChange={(e) => setSourceNeighborhood(e.target.value)}
-                  className="w-full bg-white border border-slate-200 focus:border-blue-500 rounded-xl px-4 py-3 text-slate-900 outline-none transition-colors"
-                />
-              </div>
-              <div>
-                <label className="block text-slate-600 text-sm mb-1.5 font-medium">City</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Brooklyn, Bangalore, Chicago"
-                  value={sourceCity}
-                  onChange={(e) => setSourceCity(e.target.value)}
-                  className="w-full bg-white border border-slate-200 focus:border-blue-500 rounded-xl px-4 py-3 text-slate-900 outline-none transition-colors"
-                />
-              </div>
-            </div>
-            <p className="text-xs text-slate-500 mt-6 leading-relaxed">
-              We use this to analyze the vibe of your current neighborhood and match it with equivalents.
-            </p>
-          </div>
-        )}
-
-        {/* STEP 2: Likes */}
-        {step === 2 && (
-          <div className="animate-fadeIn">
-            <span className="text-blue-600 text-xs font-semibold uppercase tracking-wider">Step 2 of 5</span>
-            <h2 className="text-3xl font-light text-slate-900 mt-2 mb-6">
-              What do you <span className="text-blue-600 font-normal">love</span> about living there?
-            </h2>
-            <div className="space-y-2">
-              <label className="block text-slate-600 text-sm mb-1.5 font-medium">Be as detailed as you like</label>
-              <textarea
-                rows={5}
-                placeholder="e.g. I love that I can walk to local coffee shops, take transit downtown in 15 minutes, and there's a strong vibe of young professionals and active nightlife."
-                value={likes}
-                onChange={(e) => setLikes(e.target.value)}
-                className="w-full bg-white border border-slate-200 focus:border-blue-500 rounded-xl p-4 text-slate-900 outline-none transition-colors resize-none leading-relaxed"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* STEP 3: Dislikes */}
-        {step === 3 && (
-          <div className="animate-fadeIn">
-            <span className="text-blue-600 text-xs font-semibold uppercase tracking-wider">Step 3 of 5</span>
-            <h2 className="text-3xl font-light text-slate-900 mt-2 mb-6">
-              What would you <span className="text-blue-600 font-normal">change</span>?
-            </h2>
-            <div className="space-y-2">
-              <label className="block text-slate-600 text-sm mb-1.5 font-medium">What gets on your nerves?</label>
-              <textarea
-                rows={5}
-                placeholder="e.g. Rent is way too expensive, traffic is terrible, it feels super crowded, and there are not enough parks or green spaces."
-                value={dislikes}
-                onChange={(e) => setDislikes(e.target.value)}
-                className="w-full bg-white border border-slate-200 focus:border-blue-500 rounded-xl p-4 text-slate-900 outline-none transition-colors resize-none leading-relaxed"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* STEP 4: Destination City */}
-        {step === 4 && (
-          <div className="animate-fadeIn">
-            <span className="text-blue-600 text-xs font-semibold uppercase tracking-wider">Step 4 of 5</span>
+            <span className="text-blue-600 text-xs font-semibold uppercase tracking-wider">Step 1 of 3</span>
             <h2 className="text-3xl font-light text-slate-900 mt-2 mb-6">
               Where are you moving?
             </h2>
+            <p className="text-slate-500 text-sm mb-6">
+              Pick one of the three cities we support right now.
+            </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {CITIES.map((city) => (
                 <button
@@ -263,10 +186,43 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           </div>
         )}
 
-        {/* STEP 5: Budget */}
-        {step === 5 && (
+        {/* STEP 2: Source Neighborhood */}
+        {step === 2 && (
           <div className="animate-fadeIn">
-            <span className="text-blue-600 text-xs font-semibold uppercase tracking-wider">Step 5 of 5</span>
+            <span className="text-blue-600 text-xs font-semibold uppercase tracking-wider">Step 2 of 3</span>
+            <h2 className="text-3xl font-light text-slate-900 mt-2 mb-6">
+              Tell us one place you liked living.
+            </h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-slate-600 text-sm mb-1.5 font-medium">Previous neighborhood or area</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Koramangala, Bangalore or Lincoln Park, Chicago"
+                  value={sourceNeighborhood}
+                  onChange={(e) => setSourceNeighborhood(e.target.value)}
+                  className="w-full bg-white border border-slate-200 focus:border-blue-500 rounded-xl px-4 py-3 text-slate-900 outline-none transition-colors"
+                />
+              </div>
+              <label className="block text-slate-600 text-sm mb-1.5 font-medium">What did you like about it?</label>
+              <textarea
+                rows={5}
+                placeholder="e.g. Walkable, great coffee shops, easy transit, young crowd, parks nearby..."
+                value={likes}
+                onChange={(e) => setLikes(e.target.value)}
+                className="w-full bg-white border border-slate-200 focus:border-blue-500 rounded-xl p-4 text-slate-900 outline-none transition-colors resize-none leading-relaxed"
+              />
+            </div>
+            <p className="text-xs text-slate-500 mt-6 leading-relaxed">
+              One sentence is enough. We will keep uncertain preferences neutral and get you to results quickly.
+            </p>
+          </div>
+        )}
+
+        {/* STEP 3: Budget */}
+        {step === 3 && (
+          <div className="animate-fadeIn">
+            <span className="text-blue-600 text-xs font-semibold uppercase tracking-wider">Step 3 of 3</span>
             <h2 className="text-3xl font-light text-slate-900 mt-2 mb-2">
               What's your monthly budget?
             </h2>
@@ -334,14 +290,12 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           </div>
 
           <div>
-            {step < 5 ? (
+            {step < 3 ? (
               <button
                 type="button"
                 onClick={nextStep}
                 disabled={
-                  (step === 1 && (!sourceNeighborhood.trim() || !sourceCity.trim())) ||
-                  (step === 2 && !likes.trim()) ||
-                  (step === 3 && !dislikes.trim())
+                  step === 2 && (!sourceNeighborhood.trim() || !likes.trim())
                 }
                 className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium px-6 py-3 rounded-full shadow-lg transition-all"
               >

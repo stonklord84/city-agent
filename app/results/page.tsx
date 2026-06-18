@@ -18,9 +18,9 @@ const MapView = dynamic(() => import("@/components/MapView"), {
 interface SessionData {
   source: {
     sourceNeighborhood: string;
-    sourceCity: string;
+    sourceCity?: string;
     likes: string;
-    dislikes: string;
+    dislikes?: string;
   };
   preferences: Record<string, number>;
   budgetMin: number;
@@ -211,30 +211,51 @@ export default function ResultsPage() {
     });
   };
 
-  // 4. Handle Chat Send (mock explanation server-side integration)
+  // 4. Handle Chat Send
   const handleChatSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim() || chatLoading) return;
 
     const userMessage = chatInput;
-    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+    const nextMessages = [...messages, { role: "user", content: userMessage }];
+    setMessages(nextMessages);
     setChatInput("");
     setChatLoading(true);
 
     try {
-      // Connect to future API/chat endpoint or mock grounded response
-      // For now, simulate streaming grounded response based on DB values
-      const currentSelected = matches.find((m) => m.neighborhoodId === selectedId);
-      const text = currentSelected
-        ? `Based on ${currentSelected.neighborhoodName}'s features, it scores a matching ${currentSelected.score}% because of its ${currentSelected.reasons[0]?.toLowerCase()} and ${currentSelected.reasons[1]?.toLowerCase()}. The rent fits your budget, ranging from ${session?.citySlug === "mumbai" ? "₹" : session?.citySlug === "toronto" ? "CA$" : "$"}${currentSelected.rentMin.toLocaleString()} to ${session?.citySlug === "mumbai" ? "₹" : session?.citySlug === "toronto" ? "CA$" : "$"}${currentSelected.rentMax.toLocaleString()}/month.`
-        : "I couldn't locate details for the selected neighborhood.";
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          citySlug: session?.citySlug ?? citySlug,
+          message: userMessage,
+          messages: nextMessages,
+          preferences: sliderPrefs,
+          matches,
+          selectedNeighborhoodId: selectedId,
+        }),
+      });
 
-      setTimeout(() => {
-        setMessages((prev) => [...prev, { role: "assistant", content: text }]);
-        setChatLoading(false);
-      }, 1000);
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "Chat request failed.");
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: payload.data?.message || "I could not find enough local context to answer that cleanly.",
+        },
+      ]);
     } catch (err) {
       console.error(err);
+      const currentSelected = matches.find((m) => m.neighborhoodId === selectedId);
+      const fallbackText = currentSelected
+        ? `Based on ${currentSelected.neighborhoodName}'s stored profile, it matches at ${currentSelected.score}% because of ${currentSelected.reasons.slice(0, 2).join(" and ").toLowerCase()}.`
+        : "I could not load the local context for that question yet.";
+      setMessages((prev) => [...prev, { role: "assistant", content: fallbackText }]);
+    } finally {
       setChatLoading(false);
     }
   };
@@ -266,9 +287,12 @@ export default function ResultsPage() {
             City Agent Relocation Dashboard — <span className="font-semibold text-blue-600 uppercase">{citySlug}</span>
           </h1>
         </div>
-        <div className="text-xs text-slate-500">
-          Source: {session?.source.sourceNeighborhood}, {session?.source.sourceCity}
-        </div>
+        {session?.source.sourceNeighborhood && (
+          <div className="text-xs text-slate-500">
+            Source: {session.source.sourceNeighborhood}
+            {session.source.sourceCity ? `, ${session.source.sourceCity}` : ""}
+          </div>
+        )}
       </header>
 
       {/* Main Container */}

@@ -17,9 +17,10 @@ export type PreferenceVector = Record<PreferenceKey, number>;
 
 export type PreferenceExtractionInput = {
   sourceNeighborhood: string;
-  sourceCity: string;
+  sourceCity?: string;
+  destinationCity?: string;
   likes: string;
-  dislikes: string;
+  dislikes?: string;
 };
 
 export type PreferenceExtractionResult = {
@@ -80,13 +81,14 @@ export function parsePreferenceVector(raw: string): PreferenceVector {
 
 function buildExtractionPrompt(input: PreferenceExtractionInput) {
   return `Source neighborhood: ${input.sourceNeighborhood}
-Source city: ${input.sourceCity}
+Source city: ${input.sourceCity || "Not provided"}
+Destination city: ${input.destinationCity || "Not provided"}
 
 What the user loves:
 ${input.likes}
 
 What the user would change:
-${input.dislikes}`;
+${input.dislikes || "The user did not provide dislikes. Infer mostly from what they liked and keep uncertain dimensions neutral."}`;
 }
 
 export async function extractPreferences(
@@ -101,7 +103,8 @@ export async function extractPreferences(
         preferenceKeys.join(", "),
         "Each value must be a number from 0.0 to 1.0.",
         "Use the source neighborhood/city as semantic context only.",
-        "If the source place is unfamiliar, rely on the user's likes and dislikes.",
+        "If the source place is unfamiliar, rely on the user's likes.",
+        "If dislikes are missing, keep uncertain dimensions close to 0.5.",
         "Do not recommend, rank, or mention destination neighborhoods.",
       ].join(" "),
     },

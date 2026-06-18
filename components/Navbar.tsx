@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import type { NavLink } from "@/types";
 import { NAV_LINKS } from "@/lib/data";
 
@@ -133,7 +134,7 @@ export default function Navbar() {
         <div className="max-w-6xl mx-auto px-5 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-[60px]">
             {/* Logo */}
-            <a
+            <Link
               href="/"
               className="flex items-center gap-2.5 focus-visible:rounded-lg"
               aria-label="City Agent — go to homepage"
@@ -142,7 +143,7 @@ export default function Navbar() {
               <span className="text-[16px] font-semibold text-slate-900 tracking-tight">
                 City Agent
               </span>
-            </a>
+            </Link>
 
             {/* Desktop links */}
             <nav

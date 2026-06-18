@@ -38,6 +38,7 @@ Set `DATABASE_URL` and `TOMTOM_API_KEY` in `.env`, then run:
 ```bash
 npm run db:setup:minimal
 npm run db:enrich
+npm run db:fill:groq
 ```
 
 The schema documentation lives in `context/db-schema.md`.
@@ -47,8 +48,10 @@ The schema documentation lives in `context/db-schema.md`.
 - `components/Onboarding.tsx` - three-step onboarding flow.
 - `app/results/page.tsx` - match results, sliders, map, rentals, and chat.
 - `app/api/extract-preferences/route.ts` - Groq preference extraction.
+- `app/api/user-profile/route.ts` - demo profile persistence and match caching.
 - `app/api/match/route.ts` - deterministic neighborhood matching.
 - `app/api/chat/route.ts` - grounded chat endpoint.
 - `lib/db/schema-minimal.ts` - current Drizzle schema.
 - `lib/db/enrich-location-profiles.ts` - TomTom + seed data enrichment.
+- `lib/db/fill-location-profiles-with-groq.ts` - Groq enrichment for neighborhood profile JSON.
 - `lib/matching/score.ts` - cosine similarity and budget scoring.

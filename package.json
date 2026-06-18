@@ -11,7 +11,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:setup:minimal": "tsx lib/db/setup-minimal-schema.ts",
-    "db:enrich": "tsx lib/db/enrich-location-profiles.ts"
+    "db:enrich": "tsx lib/db/enrich-location-profiles.ts",
+    "db:fill:groq": "tsx lib/db/fill-location-profiles-with-groq.ts"
   },
   "dependencies": {
     "@aws-sdk/rds-signer": "^3.1071.0",

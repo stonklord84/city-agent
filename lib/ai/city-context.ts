@@ -8,7 +8,6 @@ export type CityContextRequest = {
   neighborhoodIds?: string[];
   neighborhoodSlugs?: string[];
   placeLimitPerNeighborhood?: number;
-  rentalLimitPerNeighborhood?: number;
 };
 
 export type CityContextNeighborhood = {
@@ -18,6 +17,8 @@ export type CityContextNeighborhood = {
   summary: string;
   vibeTags: string[];
   bestForTags: string[];
+  llmProfile: unknown;
+  commuteEstimates: unknown;
   rentMin: number;
   rentMax: number;
   lat: number;
@@ -43,16 +44,6 @@ export type CityContextNeighborhood = {
     bestForTags: string[];
     distanceMeters: number | null;
   }>;
-  rentals: Array<{
-    id: string;
-    title: string;
-    price: number;
-    currency: string;
-    bedrooms: number;
-    bathrooms: number;
-    source: string;
-    externalUrl: string;
-  }>;
 };
 
 export type CityContext = {
@@ -67,14 +58,11 @@ export type CityContext = {
 };
 
 const DEFAULT_PLACE_LIMIT = 8;
-const DEFAULT_RENTAL_LIMIT = 4;
-
 export async function getCityContext({
   citySlug,
   neighborhoodIds = [],
   neighborhoodSlugs = [],
   placeLimitPerNeighborhood = DEFAULT_PLACE_LIMIT,
-  rentalLimitPerNeighborhood = DEFAULT_RENTAL_LIMIT,
 }: CityContextRequest): Promise<CityContext | null> {
   const [city] = await db
     .select({
@@ -124,6 +112,8 @@ export async function getCityContext({
       summary: profile.summary,
       vibeTags: profile.vibeTags,
       bestForTags: profile.bestForTags,
+      llmProfile: profile.llmProfile,
+      commuteEstimates: profile.commuteEstimates,
       rentMin: profile.rentMin,
       rentMax: profile.rentMax,
       lat: profile.lat,
@@ -149,16 +139,6 @@ export async function getCityContext({
         bestForTags: place.bestForTags,
         distanceMeters: null,
       })),
-      rentals: profile.rentals.slice(0, rentalLimitPerNeighborhood).map((rental, index) => ({
-        id: `${profile.id}-rental-${index}`,
-        title: rental.title,
-        price: rental.price,
-        currency: rental.currency,
-        bedrooms: rental.bedrooms ?? 0,
-        bathrooms: rental.bathrooms ?? 1,
-        source: rental.source ?? "seeded",
-        externalUrl: rental.externalUrl ?? "#",
-      })),
     })),
   };
 }
@@ -172,6 +152,8 @@ export function cityContextToPrompt(context: CityContext): string {
         summary: neighborhood.summary,
         vibeTags: neighborhood.vibeTags,
         bestForTags: neighborhood.bestForTags,
+        llmProfile: neighborhood.llmProfile,
+        commuteEstimates: neighborhood.commuteEstimates,
         rentRange: {
           min: neighborhood.rentMin,
           max: neighborhood.rentMax,
@@ -186,14 +168,6 @@ export function cityContextToPrompt(context: CityContext): string {
           vibeTags: place.vibeTags,
           bestForTags: place.bestForTags,
           distanceMeters: place.distanceMeters,
-        })),
-        rentals: neighborhood.rentals.map((rental) => ({
-          title: rental.title,
-          price: rental.price,
-          currency: rental.currency,
-          bedrooms: rental.bedrooms,
-          bathrooms: rental.bathrooms,
-          source: rental.source,
         })),
       })),
     },

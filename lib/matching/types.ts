@@ -1,5 +1,3 @@
-import { PreferenceVector } from "@/lib/ai/extract-preferences";
-
 export interface MatchResult {
   neighborhoodId: string;
   neighborhoodName: string;
@@ -26,4 +24,7 @@ export interface MatchResult {
   rentMax: number;
   lat: number;
   lng: number;
+  summary: string;
+  vibeTags: string[];
+  bestForTags: string[];
 }

@@ -172,6 +172,9 @@ export function scoreNeighborhoods(
       rentMax: neighborhood.rentMax,
       lat: neighborhood.lat,
       lng: neighborhood.lng,
+      summary: neighborhood.summary,
+      vibeTags: neighborhood.vibeTags,
+      bestForTags: neighborhood.bestForTags,
     } as MatchResult;
   });
 

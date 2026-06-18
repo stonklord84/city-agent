@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { Suspense, useEffect, useState, useTransition } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import type { MatchResult } from "@/lib/matching/types";
 
 // Dynamic import for MapView since maplibregl uses document/window API
 const MapView = dynamic(() => import("@/components/MapView"), {
@@ -26,7 +27,18 @@ interface SessionData {
   budgetMin: number;
   budgetMax: number;
   citySlug: string;
+  profileId?: string;
 }
+
+type NearbyPlace = {
+  id: string;
+  name: string;
+  category: "food" | "nightlife" | "wellness" | "practical";
+  summary: string;
+  priceRange?: string;
+  vibeTags: string[];
+  bestForTags: string[];
+};
 
 const PREFERENCE_LABELS: Record<string, string> = {
   walkability: "Walkability",
@@ -40,20 +52,46 @@ const PREFERENCE_LABELS: Record<string, string> = {
   diversity: "Diversity",
 };
 
-export default function ResultsPage() {
+const FEATURE_KEY_MAP = {
+  walkability: "walkability",
+  transit: "transit",
+  nightlife: "nightlife",
+  safety: "safety",
+  cafes: "cafes",
+  parks: "parks",
+  young_professionals: "youngProfessionals",
+  affordability: "affordability",
+  diversity: "diversity",
+} as const;
+
+const CATEGORY_LABELS: Record<NearbyPlace["category"], string> = {
+  food: "Food & cafes",
+  nightlife: "Nightlife",
+  wellness: "Parks & wellness",
+  practical: "Daily practicals",
+};
+
+const CATEGORY_STYLES: Record<NearbyPlace["category"], string> = {
+  food: "border-orange-200 bg-orange-50 text-orange-700",
+  nightlife: "border-purple-200 bg-purple-50 text-purple-700",
+  wellness: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  practical: "border-sky-200 bg-sky-50 text-sky-700",
+};
+
+function ResultsPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
   const [session, setSession] = useState<SessionData | null>(null);
-  const [rawNeighborhoods, setRawNeighborhoods] = useState<any[]>([]);
-  const [matches, setMatches] = useState<any[]>([]);
+  const [rawNeighborhoods, setRawNeighborhoods] = useState<MatchResult[]>([]);
+  const [matches, setMatches] = useState<MatchResult[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [rentals, setRentals] = useState<any[]>([]);
+  const [nearbyPlaces, setNearbyPlaces] = useState<NearbyPlace[]>([]);
   
   // Loading states
   const [loading, setLoading] = useState(true);
-  const [loadingRentals, setLoadingRentals] = useState(false);
+  const [loadingPlaces, setLoadingPlaces] = useState(false);
   const [chatLoading, setChatLoading] = useState(false);
 
   // Preference sliders state
@@ -63,7 +101,7 @@ export default function ResultsPage() {
   const [messages, setMessages] = useState<Array<{ role: string; content: string }>>([
     {
       role: "assistant",
-      content: "Welcome! I've loaded your neighborhood matches based on your lifestyle profile. Feel free to adjust the sliders on the left, or ask me questions about these neighborhoods below!",
+      content: "I loaded your neighborhood matches. Pick a marker or a match card, then ask me to compare options, explain tradeoffs, or find places close by.",
     },
   ]);
   const [chatInput, setChatInput] = useState("");
@@ -97,11 +135,30 @@ export default function ResultsPage() {
             }),
           });
           const payload = await res.json();
-          if (payload.data?.matches) {
-            setRawNeighborhoods(payload.data.matches);
-            setMatches(payload.data.matches);
-            if (payload.data.matches.length > 0) {
-              setSelectedId(payload.data.matches[0].neighborhoodId);
+          const fetchedMatches = payload.data?.matches as MatchResult[] | undefined;
+          if (fetchedMatches) {
+            setRawNeighborhoods(fetchedMatches);
+            setMatches(fetchedMatches);
+            if (fetchedMatches.length > 0) {
+              setSelectedId(fetchedMatches[0].neighborhoodId);
+            }
+            if (parsed.profileId) {
+              fetch("/api/user-profile", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  profileId: parsed.profileId,
+                  matchedNeighborhoods: fetchedMatches
+                    .slice(0, 5)
+                    .map((match) => ({
+                      neighborhoodProfileId: match.neighborhoodId,
+                      score: match.score,
+                      reasons: match.reasons,
+                    })),
+                }),
+              }).catch((error) => {
+                console.error("Profile match save failed:", error);
+              });
             }
           }
         } catch (err) {
@@ -118,26 +175,26 @@ export default function ResultsPage() {
     }
   }, [citySlug, router]);
 
-  // 2. Load rentals when selected neighborhood changes
+  // 2. Load nearby places when selected neighborhood changes
   useEffect(() => {
     if (!selectedId) return;
 
-    const fetchRentals = async () => {
-      setLoadingRentals(true);
+    const fetchPlaces = async () => {
+      setLoadingPlaces(true);
       try {
-        const res = await fetch(`/api/rentals?neighborhoodId=${selectedId}`);
+        const res = await fetch(`/api/places?neighborhoodId=${selectedId}&limit=12`);
         const payload = await res.json();
         if (payload.data) {
-          setRentals(payload.data);
+          setNearbyPlaces(payload.data);
         }
       } catch (err) {
         console.error(err);
       } finally {
-        setLoadingRentals(false);
+        setLoadingPlaces(false);
       }
     };
 
-    fetchRentals();
+    fetchPlaces();
   }, [selectedId]);
 
   // 3. Client-side re-scoring on slider change
@@ -155,16 +212,11 @@ export default function ResultsPage() {
         let normA = 0;
         let normB = 0;
 
-        Object.keys(updatedPrefs).forEach((prefKey) => {
+        Object.keys(FEATURE_KEY_MAP).forEach((prefKey) => {
+          const typedPrefKey = prefKey as keyof typeof FEATURE_KEY_MAP;
+          const featureKey = FEATURE_KEY_MAP[typedPrefKey];
           const a = updatedPrefs[prefKey] ?? 0.5;
-          
-          // Map to database key naming in MatchResult features
-          let dbVal = 0.5;
-          if (prefKey === "young_professionals") {
-            dbVal = row.features.youngProfessionals;
-          } else {
-            dbVal = row.features[prefKey] ?? 0.5;
-          }
+          const dbVal = row.features[featureKey] ?? 0.5;
 
           dotProduct += a * dbVal;
           normA += a * a;
@@ -233,6 +285,7 @@ export default function ResultsPage() {
           preferences: sliderPrefs,
           matches,
           selectedNeighborhoodId: selectedId,
+          sourceContext: session?.source,
         }),
       });
 
@@ -261,6 +314,21 @@ export default function ResultsPage() {
   };
 
   const selectedNeighborhood = matches.find((m) => m.neighborhoodId === selectedId);
+  const placeCategoryCounts = nearbyPlaces.reduce(
+    (counts, place) => {
+      counts[place.category] = (counts[place.category] ?? 0) + 1;
+      return counts;
+    },
+    {} as Partial<Record<NearbyPlace["category"], number>>,
+  );
+  const topNearbyTags = Array.from(
+    new Set(
+      nearbyPlaces.flatMap((place) => [
+        ...place.bestForTags.slice(0, 2),
+        ...place.vibeTags.slice(0, 2),
+      ]),
+    ),
+  ).slice(0, 6);
   const mapCenter: [number, number] = selectedNeighborhood
     ? [selectedNeighborhood.lng, selectedNeighborhood.lat]
     : [-74.006, 40.7128]; // NYC default
@@ -361,6 +429,9 @@ export default function ResultsPage() {
                         </span>
                       ))}
                     </div>
+                    <p className="mt-3 text-xs text-slate-500 leading-relaxed line-clamp-2">
+                      {match.summary}
+                    </p>
                   </button>
                 );
               })}
@@ -368,7 +439,7 @@ export default function ResultsPage() {
           </div>
         </aside>
 
-        {/* Center/Right Area: Map, Rentals & Chat */}
+        {/* Center/Right Area: Map, Nearby Fit & Chat */}
         <main className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
           
           {/* Map Section */}
@@ -395,12 +466,29 @@ export default function ResultsPage() {
                 
                 {/* Rent Range Indicator */}
                 <div className="text-sm text-slate-500 mb-4 font-light">
-                  Rent average:{" "}
+                  Typical rent range:{" "}
                   <span className="text-slate-900 font-medium">
                     {citySlug === "mumbai" ? "₹" : citySlug === "toronto" ? "CA$" : "$"}
                     {selectedNeighborhood.rentMin.toLocaleString()} – {selectedNeighborhood.rentMin === selectedNeighborhood.rentMax ? "" : `${citySlug === "mumbai" ? "₹" : citySlug === "toronto" ? "CA$" : "$"}${selectedNeighborhood.rentMax.toLocaleString()}`}
                   </span>
                   /month
+                </div>
+
+                <p className="text-sm text-slate-600 leading-relaxed">
+                  {selectedNeighborhood.summary}
+                </p>
+
+                <div className="mt-4 flex flex-wrap gap-1.5">
+                  {[...selectedNeighborhood.vibeTags, ...selectedNeighborhood.bestForTags]
+                    .slice(0, 7)
+                    .map((tag: string) => (
+                      <span
+                        key={tag}
+                        className="text-[10px] bg-slate-50 px-2 py-1 rounded-full border border-slate-200 text-slate-600"
+                      >
+                        {tag}
+                      </span>
+                    ))}
                 </div>
 
                 {/* Reasons List */}
@@ -418,44 +506,91 @@ export default function ResultsPage() {
               </div>
             )}
 
-            {/* Rentals Subsection */}
+            {/* Nearby Fit Subsection */}
             <div className="p-6 border-b border-slate-200 flex-1 min-h-[200px] flex flex-col">
-              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">Available Rentals</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Nearby Fit</h3>
+                {nearbyPlaces.length > 0 && (
+                  <span className="text-[10px] text-slate-500">
+                    {nearbyPlaces.length} saved places
+                  </span>
+                )}
+              </div>
               
-              {loadingRentals ? (
+              {loadingPlaces ? (
                 <div className="flex-1 flex items-center justify-center py-8">
                   <span className="w-5 h-5 border-2 border-slate-200 border-t-blue-600 rounded-full animate-spin" />
                 </div>
-              ) : rentals.length === 0 ? (
+              ) : nearbyPlaces.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center py-8 text-xs text-slate-500">
-                  No active listings matches your budget.
+                  No nearby-fit places are saved for this neighborhood yet.
                 </div>
               ) : (
-                <div className="space-y-3 max-h-64 overflow-y-auto no-scrollbar">
-                  {rentals.map((rental) => (
-                    <div key={rental.id} className="bg-white border border-slate-200 hover:border-blue-200 p-4 rounded-xl flex justify-between items-center transition-all">
-                      <div>
-                        <h4 className="text-xs font-medium text-slate-900 truncate max-w-[180px]">{rental.title}</h4>
-                        <div className="text-[10px] text-slate-500 mt-1">
-                          {rental.bedrooms} Bed · {rental.bathrooms} Bath {rental.sqft ? `· ${rental.sqft} sqft` : ""}
+                <div className="space-y-4 max-h-[22rem] overflow-y-auto no-scrollbar pr-1">
+                  <div className="grid grid-cols-2 gap-2">
+                    {(Object.keys(CATEGORY_LABELS) as NearbyPlace["category"][]).map((category) => (
+                      <div
+                        key={category}
+                        className={`rounded-xl border px-3 py-2 ${CATEGORY_STYLES[category]}`}
+                      >
+                        <div className="text-[10px] font-semibold">
+                          {CATEGORY_LABELS[category]}
+                        </div>
+                        <div className="text-lg font-semibold leading-tight">
+                          {placeCategoryCounts[category] ?? 0}
                         </div>
                       </div>
-                      <div className="text-right">
-                        <div className="text-sm font-semibold text-blue-600">
-                          {rental.currency === "INR" ? "₹" : rental.currency === "CAD" ? "CA$" : "$"}
-                          {rental.price.toLocaleString()}
-                        </div>
-                        <a
-                          href={rental.externalUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-block text-[9px] text-blue-600 hover:text-blue-700 font-medium underline mt-1"
-                        >
-                          View Listings →
-                        </a>
+                    ))}
+                  </div>
+
+                  {topNearbyTags.length > 0 && (
+                    <div>
+                      <h4 className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                        Good when you want
+                      </h4>
+                      <div className="flex flex-wrap gap-1.5">
+                        {topNearbyTags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="text-[10px] bg-slate-50 px-2 py-1 rounded-full border border-slate-200 text-slate-600"
+                          >
+                            {tag}
+                          </span>
+                        ))}
                       </div>
                     </div>
-                  ))}
+                  )}
+
+                  <div className="space-y-2">
+                    {nearbyPlaces.slice(0, 8).map((place) => (
+                      <div
+                        key={place.id}
+                        className={`bg-white border-l-4 border border-slate-200 hover:border-blue-200 p-4 rounded-xl transition-all ${
+                          place.category === "food"
+                            ? "border-l-orange-400"
+                            : place.category === "nightlife"
+                              ? "border-l-purple-400"
+                              : place.category === "wellness"
+                                ? "border-l-emerald-400"
+                                : "border-l-sky-400"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <h4 className="text-xs font-medium text-slate-900">
+                              {place.name}
+                            </h4>
+                            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                              {place.summary}
+                            </p>
+                          </div>
+                          <span className={`text-[9px] px-2 py-0.5 rounded-full border whitespace-nowrap ${CATEGORY_STYLES[place.category]}`}>
+                            {place.category}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -506,5 +641,20 @@ export default function ResultsPage() {
         </main>
       </div>
     </div>
+  );
+}
+
+export default function ResultsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-white flex flex-col items-center justify-center text-slate-900">
+          <span className="w-10 h-10 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin mb-4" />
+          <h2 className="text-xl font-light text-slate-600">Loading results...</h2>
+        </div>
+      }
+    >
+      <ResultsPageContent />
+    </Suspense>
   );
 }

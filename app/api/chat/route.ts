@@ -19,6 +19,12 @@ type ChatRequestBody = {
   preferences?: PreferenceVector;
   matches?: MatchResult[];
   selectedNeighborhoodId?: string;
+  sourceContext?: {
+    sourceNeighborhood?: string;
+    sourceCity?: string;
+    likes?: string;
+    dislikes?: string;
+  };
 };
 
 function parseChatMessage(raw: string) {
@@ -44,6 +50,7 @@ export async function POST(request: Request) {
       preferences,
       matches = [],
       selectedNeighborhoodId,
+      sourceContext,
     } = body;
 
     if (!citySlug || !message?.trim()) {
@@ -67,7 +74,6 @@ export async function POST(request: Request) {
       citySlug,
       neighborhoodIds,
       placeLimitPerNeighborhood: 6,
-      rentalLimitPerNeighborhood: 3,
     });
 
     if (!context) {
@@ -94,6 +100,7 @@ export async function POST(request: Request) {
           {
             currentQuestion: message,
             recentMessages: messages.slice(-6),
+            sourceContext,
             userPreferences: preferences,
             deterministicMatches: topMatches.map((match) => ({
               neighborhoodId: match.neighborhoodId,

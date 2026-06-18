@@ -4,7 +4,19 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 interface OnboardingProps {
-  onComplete?: (data: any) => void;
+  onComplete?: (data: {
+    source: {
+      sourceNeighborhood: string;
+      sourceCity: string;
+      likes: string;
+      dislikes: string;
+    };
+    preferences: Record<string, number>;
+    budgetMin: number;
+    budgetMax: number;
+    citySlug: string;
+    profileId?: string;
+  }) => void;
 }
 
 const CITIES = [
@@ -55,8 +67,10 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   const [loading, setLoading] = useState(false);
 
   // Form State
-  const [sourceNeighborhood, setSourceNeighborhood] = useState("");
-  const [likes, setLikes] = useState("");
+  const [sourceNeighborhood, setSourceNeighborhood] = useState("Atlanta, USA");
+  const [likes, setLikes] = useState(
+    "I liked the tree-lined neighborhoods, friendly energy, coffee shops, parks, good food, and that it felt social without being as intense as New York.",
+  );
   const [destCitySlug, setDestCitySlug] = useState("nyc");
   
   // Budget values
@@ -99,15 +113,32 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
       const payload = await res.json();
       const extractedPrefs = payload.data.preferences;
 
-      // 2. Save in client local storage
-      const sessionData = {
+      // 2. Save source-place context and preference vector in Neon.
+      let sessionData = {
         source: { sourceNeighborhood, sourceCity: "", likes, dislikes: "" },
         preferences: extractedPrefs,
         budgetMin,
         budgetMax,
         citySlug: destCitySlug,
+        profileId: undefined as string | undefined,
       };
 
+      try {
+        const profileRes = await fetch("/api/user-profile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(sessionData),
+        });
+        const profilePayload = await profileRes.json();
+        sessionData = {
+          ...sessionData,
+          profileId: profilePayload.data?.profileId,
+        };
+      } catch (profileError) {
+        console.error("Profile save failed:", profileError);
+      }
+
+      // 3. Save in client local storage for fast results-page rendering.
       localStorage.setItem("city_agent_onboarding", JSON.stringify(sessionData));
 
       if (onComplete) {
@@ -135,7 +166,24 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
         budgetMax,
         citySlug: destCitySlug,
       };
-      localStorage.setItem("city_agent_onboarding", JSON.stringify(sessionData));
+      try {
+        const profileRes = await fetch("/api/user-profile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(sessionData),
+        });
+        const profilePayload = await profileRes.json();
+        localStorage.setItem(
+          "city_agent_onboarding",
+          JSON.stringify({
+            ...sessionData,
+            profileId: profilePayload.data?.profileId,
+          }),
+        );
+      } catch (profileError) {
+        console.error("Profile save failed:", profileError);
+        localStorage.setItem("city_agent_onboarding", JSON.stringify(sessionData));
+      }
       router.push(`/results?city=${destCitySlug}`);
     } finally {
       setLoading(false);
@@ -224,7 +272,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           <div className="animate-fadeIn">
             <span className="text-blue-600 text-xs font-semibold uppercase tracking-wider">Step 3 of 3</span>
             <h2 className="text-3xl font-light text-slate-900 mt-2 mb-2">
-              What's your monthly budget?
+              What&apos;s your monthly budget?
             </h2>
             <p className="text-slate-500 text-sm mb-8">
               Target rent range for your apartments in {currentCityConfig.name}.

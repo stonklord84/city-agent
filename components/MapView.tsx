@@ -37,7 +37,7 @@ export default function MapView({ matches, selectedId, onSelect, center }: MapVi
         map.current = null;
       }
     };
-  }, []);
+  }, [center]);
 
   // Update map center when it changes
   useEffect(() => {
@@ -56,7 +56,7 @@ export default function MapView({ matches, selectedId, onSelect, center }: MapVi
     const currentMap = map.current;
 
     // Remove old markers
-    Object.entries(markersRef.current).forEach(([id, marker]) => {
+    Object.values(markersRef.current).forEach((marker) => {
       marker.remove();
     });
     markersRef.current = {};

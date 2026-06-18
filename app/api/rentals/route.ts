@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
-import { rentals } from "@/lib/db/schema";
+import { neighborhoodProfiles } from "@/lib/db/schema-minimal";
 import { eq } from "drizzle-orm";
 
 export const runtime = "nodejs";
@@ -17,11 +17,30 @@ export async function GET(request: Request) {
   }
 
   try {
-    const list = await db
+    const [profile] = await db
       .select()
-      .from(rentals)
-      .where(eq(rentals.neighborhoodId, neighborhoodId))
-      .orderBy(rentals.price);
+      .from(neighborhoodProfiles)
+      .where(eq(neighborhoodProfiles.id, neighborhoodId))
+      .limit(1);
+
+    if (!profile) {
+      return NextResponse.json(
+        { error: "Neighborhood profile not found." },
+        { status: 404 }
+      );
+    }
+
+    const list = [...profile.rentals]
+      .sort((a, b) => a.price - b.price)
+      .map((rental, index) => ({
+        id: `${profile.id}-rental-${index}`,
+        neighborhoodId: profile.id,
+        bedrooms: 0,
+        bathrooms: 1,
+        source: "seeded",
+        externalUrl: "#",
+        ...rental,
+      }));
 
     return NextResponse.json({
       data: list,

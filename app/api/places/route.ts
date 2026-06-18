@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { neighborhoods, places } from "@/lib/db/schema";
+import { neighborhoodProfiles } from "@/lib/db/schema-minimal";
 
 export const runtime = "nodejs";
 
@@ -23,40 +23,27 @@ export async function GET(request: Request) {
   }
 
   try {
-    const [neighborhood] = await db
-      .select({
-        id: neighborhoods.id,
-        coordinates: neighborhoods.coordinates,
-      })
-      .from(neighborhoods)
-      .where(eq(neighborhoods.id, neighborhoodId))
+    const [profile] = await db
+      .select()
+      .from(neighborhoodProfiles)
+      .where(eq(neighborhoodProfiles.id, neighborhoodId))
       .limit(1);
 
-    if (!neighborhood) {
+    if (!profile) {
       return NextResponse.json(
-        { error: "Neighborhood not found." },
+        { error: "Neighborhood profile not found." },
         { status: 404 },
       );
     }
 
-    const list = await db
-      .select({
-        id: places.id,
-        name: places.name,
-        slug: places.slug,
-        category: places.category,
-        summary: places.summary,
-        priceRange: places.priceRange,
-        vibeTags: places.vibeTags,
-        bestForTags: places.bestForTags,
-        lat: places.lat,
-        lng: places.lng,
-        distanceMeters: sql<number>`round(ST_Distance(${places.coordinates}, ${neighborhood.coordinates}))::int`,
-      })
-      .from(places)
-      .where(eq(places.neighborhoodId, neighborhoodId))
-      .orderBy(sql`ST_Distance(${places.coordinates}, ${neighborhood.coordinates})`)
-      .limit(limit);
+    const list = profile.places.slice(0, limit).map((place, index) => ({
+      id: `${profile.id}-place-${index}`,
+      neighborhoodId: profile.id,
+      slug: place.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""),
+      priceRange: "$$",
+      distanceMeters: null,
+      ...place,
+    }));
 
     return NextResponse.json({ data: list });
   } catch (error) {

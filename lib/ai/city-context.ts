@@ -1,13 +1,7 @@
-import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, or } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import {
-  cities,
-  neighborhoodFeatures,
-  neighborhoods,
-  places,
-  rentals,
-} from "@/lib/db/schema";
+import { cities, neighborhoodProfiles } from "@/lib/db/schema-minimal";
 
 export type CityContextRequest = {
   citySlug: string;
@@ -98,101 +92,74 @@ export async function getCityContext({
     return null;
   }
 
-  const filters = [eq(neighborhoods.cityId, city.id)];
+  const filters = [eq(neighborhoodProfiles.cityId, city.id)];
   const hasIds = neighborhoodIds.length > 0;
   const hasSlugs = neighborhoodSlugs.length > 0;
 
   if (hasIds && hasSlugs) {
     filters.push(
       or(
-        inArray(neighborhoods.id, neighborhoodIds),
-        inArray(neighborhoods.slug, neighborhoodSlugs),
+        inArray(neighborhoodProfiles.id, neighborhoodIds),
+        inArray(neighborhoodProfiles.slug, neighborhoodSlugs),
       )!,
     );
   } else if (hasIds) {
-    filters.push(inArray(neighborhoods.id, neighborhoodIds));
+    filters.push(inArray(neighborhoodProfiles.id, neighborhoodIds));
   } else if (hasSlugs) {
-    filters.push(inArray(neighborhoods.slug, neighborhoodSlugs));
+    filters.push(inArray(neighborhoodProfiles.slug, neighborhoodSlugs));
   }
 
-  const rows = await db
-    .select({
-      neighborhood: neighborhoods,
-      features: neighborhoodFeatures,
-    })
-    .from(neighborhoods)
-    .innerJoin(
-      neighborhoodFeatures,
-      eq(neighborhoods.id, neighborhoodFeatures.neighborhoodId),
-    )
+  const profiles = await db
+    .select()
+    .from(neighborhoodProfiles)
     .where(and(...filters))
-    .orderBy(asc(neighborhoods.name));
-
-  const contextNeighborhoods: CityContextNeighborhood[] = [];
-
-  for (const row of rows) {
-    const nearbyPlaces = await db
-      .select({
-        id: places.id,
-        name: places.name,
-        category: places.category,
-        summary: places.summary,
-        priceRange: places.priceRange,
-        vibeTags: places.vibeTags,
-        bestForTags: places.bestForTags,
-        distanceMeters: sql<number>`round(ST_Distance(${places.coordinates}, ${row.neighborhood.coordinates}))::int`,
-      })
-      .from(places)
-      .where(eq(places.neighborhoodId, row.neighborhood.id))
-      .orderBy(sql`ST_Distance(${places.coordinates}, ${row.neighborhood.coordinates})`)
-      .limit(placeLimitPerNeighborhood);
-
-    const rentalRows = await db
-      .select({
-        id: rentals.id,
-        title: rentals.title,
-        price: rentals.price,
-        currency: rentals.currency,
-        bedrooms: rentals.bedrooms,
-        bathrooms: rentals.bathrooms,
-        source: rentals.source,
-        externalUrl: rentals.externalUrl,
-      })
-      .from(rentals)
-      .where(eq(rentals.neighborhoodId, row.neighborhood.id))
-      .orderBy(asc(rentals.price))
-      .limit(rentalLimitPerNeighborhood);
-
-    contextNeighborhoods.push({
-      id: row.neighborhood.id,
-      name: row.neighborhood.name,
-      slug: row.neighborhood.slug,
-      summary: row.neighborhood.summary,
-      vibeTags: row.neighborhood.vibeTags,
-      bestForTags: row.neighborhood.bestForTags,
-      rentMin: row.neighborhood.rentMin,
-      rentMax: row.neighborhood.rentMax,
-      lat: row.neighborhood.lat,
-      lng: row.neighborhood.lng,
-      features: {
-        walkability: row.features.walkability,
-        transit: row.features.transit,
-        nightlife: row.features.nightlife,
-        safety: row.features.safety,
-        cafes: row.features.cafes,
-        parks: row.features.parks,
-        youngProfessionals: row.features.youngProfessionals,
-        affordability: row.features.affordability,
-        diversity: row.features.diversity,
-      },
-      places: nearbyPlaces,
-      rentals: rentalRows,
-    });
-  }
+    .orderBy(asc(neighborhoodProfiles.name));
 
   return {
     city,
-    neighborhoods: contextNeighborhoods,
+    neighborhoods: profiles.map((profile) => ({
+      id: profile.id,
+      name: profile.name,
+      slug: profile.slug,
+      summary: profile.summary,
+      vibeTags: profile.vibeTags,
+      bestForTags: profile.bestForTags,
+      rentMin: profile.rentMin,
+      rentMax: profile.rentMax,
+      lat: profile.lat,
+      lng: profile.lng,
+      features: {
+        walkability: profile.walkability,
+        transit: profile.transit,
+        nightlife: profile.nightlife,
+        safety: profile.safety,
+        cafes: profile.cafes,
+        parks: profile.parks,
+        youngProfessionals: profile.youngProfessionals,
+        affordability: profile.affordability,
+        diversity: profile.diversity,
+      },
+      places: profile.places.slice(0, placeLimitPerNeighborhood).map((place, index) => ({
+        id: `${profile.id}-place-${index}`,
+        name: place.name,
+        category: place.category,
+        summary: place.summary,
+        priceRange: place.priceRange ?? "$$",
+        vibeTags: place.vibeTags,
+        bestForTags: place.bestForTags,
+        distanceMeters: null,
+      })),
+      rentals: profile.rentals.slice(0, rentalLimitPerNeighborhood).map((rental, index) => ({
+        id: `${profile.id}-rental-${index}`,
+        title: rental.title,
+        price: rental.price,
+        currency: rental.currency,
+        bedrooms: rental.bedrooms ?? 0,
+        bathrooms: rental.bathrooms ?? 1,
+        source: rental.source ?? "seeded",
+        externalUrl: rental.externalUrl ?? "#",
+      })),
+    })),
   };
 }
 

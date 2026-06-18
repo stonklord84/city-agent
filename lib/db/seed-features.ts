@@ -1,4 +1,4 @@
-// Seed data for neighborhood_features and rentals
+// Seed data for neighborhood profile feature columns and rentals JSON
 // All feature values are 0.0–1.0 floats (higher = more of that quality)
 
 export type FeatureVector = {

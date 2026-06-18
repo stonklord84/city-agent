@@ -1,11 +1,16 @@
-import type { placeCategories } from "@/lib/db/schema";
+export const seedPlaceCategories = [
+  "food",
+  "nightlife",
+  "wellness",
+  "practical",
+] as const;
 
 export const demoUser = {
   email: "demo@localguide.app",
   name: "LocalGuide Demo User",
 };
 
-export type SeedPlaceCategory = (typeof placeCategories)[number];
+export type SeedPlaceCategory = (typeof seedPlaceCategories)[number];
 
 export type SeedPlace = {
   name: string;
@@ -1414,4 +1419,3 @@ export const seedCities: SeedCity[] = [
     ],
   },
 ];
-

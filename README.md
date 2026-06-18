@@ -1,90 +1,54 @@
-<<<<<<< HEAD
-# City Agent 🗺️
+# City Agent
 
-AI-powered neighborhood discovery platform. Find the neighborhood that fits your life.
+City Agent is a Next.js relocation app that matches people to neighborhoods in Toronto, Mumbai, and New York City from a short lifestyle prompt.
 
-## Tech Stack
-- Next.js 15 (App Router)
+## Stack
+
+- Next.js 15 App Router
 - TypeScript
 - Tailwind CSS
-- Google Fonts (Inter + Fraunces)
+- Neon Postgres for development
+- AWS Aurora PostgreSQL + PostGIS later
+- Drizzle ORM
+- Groq for preference extraction and grounded chat
+- TomTom for neighborhood place enrichment
+- MapLibre + OpenFreeMap for maps
 
-## Getting Started
+## Run Locally
 
 ```bash
-# Install dependencies
 npm install
-
-# Run development server
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000)
+Open `http://localhost:3000`.
 
-## Project Structure
+## Database
 
-```
-city-agent/
-├── app/
-│   ├── layout.tsx       # Root layout + fonts + metadata
-│   ├── page.tsx         # Homepage
-│   └── globals.css      # Global styles + design tokens
-├── components/
-│   ├── Navbar.tsx
-│   ├── Hero.tsx
-│   ├── ExamplePrompts.tsx
-│   ├── HowItWorks.tsx
-│   ├── NeighborhoodCards.tsx
-│   ├── ChatDemo.tsx
-│   └── GlobalCoverage.tsx
-├── lib/
-│   └── data.ts          # All content/data
-├── types/
-│   └── index.ts         # TypeScript interfaces
-├── tailwind.config.ts
-└── tsconfig.json
+The current MVP schema is intentionally small:
+
+```txt
+cities
+neighborhood_profiles
+user_profiles
 ```
 
-## Deploy to Vercel
-```bash
-npm i -g vercel
-vercel
-```
-=======
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
-
-## Getting Started
-
-First, run the development server:
+Set `DATABASE_URL` and `TOMTOM_API_KEY` in `.env`, then run:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run db:setup:minimal
+npm run db:enrich
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The schema documentation lives in `context/db-schema.md`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Main Files
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
->>>>>>> main
+- `components/Onboarding.tsx` - three-step onboarding flow.
+- `app/results/page.tsx` - match results, sliders, map, rentals, and chat.
+- `app/api/extract-preferences/route.ts` - Groq preference extraction.
+- `app/api/match/route.ts` - deterministic neighborhood matching.
+- `app/api/chat/route.ts` - grounded chat endpoint.
+- `lib/db/schema-minimal.ts` - current Drizzle schema.
+- `lib/db/enrich-location-profiles.ts` - TomTom + seed data enrichment.
+- `lib/matching/score.ts` - cosine similarity and budget scoring.

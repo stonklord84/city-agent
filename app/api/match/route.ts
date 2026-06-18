@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
-import { neighborhoods, neighborhoodFeatures, cities } from "@/lib/db/schema";
+import { neighborhoodProfiles, cities } from "@/lib/db/schema-minimal";
 import { eq } from "drizzle-orm";
 import { scoreNeighborhoods } from "@/lib/matching/score";
 import { PreferenceVector } from "@/lib/ai/extract-preferences";
@@ -40,23 +40,16 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. Fetch neighborhoods with features in the target city
-    const rawData = await db
-      .select({
-        neighborhood: neighborhoods,
-        features: neighborhoodFeatures,
-      })
-      .from(neighborhoods)
-      .innerJoin(
-        neighborhoodFeatures,
-        eq(neighborhoods.id, neighborhoodFeatures.neighborhoodId)
-      )
-      .where(eq(neighborhoods.cityId, city.id));
+    // 2. Fetch neighborhood profiles in the target city
+    const profiles = await db
+      .select()
+      .from(neighborhoodProfiles)
+      .where(eq(neighborhoodProfiles.cityId, city.id));
 
     // Map into the format expected by scoreNeighborhoods
-    const neighborhoodsWithFeatures = rawData.map((row) => ({
-      neighborhood: row.neighborhood,
-      features: row.features,
+    const neighborhoodsWithFeatures = profiles.map((profile) => ({
+      neighborhood: profile,
+      features: profile,
       city: city,
     }));
 

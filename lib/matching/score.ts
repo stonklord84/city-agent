@@ -1,8 +1,19 @@
 import { PreferenceVector, PreferenceKey } from "@/lib/ai/extract-preferences";
-import { Neighborhood, NeighborhoodFeatures, City } from "@/lib/db/schema";
+import { City, NeighborhoodProfile } from "@/lib/db/schema-minimal";
 import { MatchResult } from "./types";
 
-const FEATURE_KEY_MAP: Record<PreferenceKey, keyof NeighborhoodFeatures> = {
+type ProfileFeatureKey =
+  | "walkability"
+  | "transit"
+  | "nightlife"
+  | "safety"
+  | "cafes"
+  | "parks"
+  | "youngProfessionals"
+  | "affordability"
+  | "diversity";
+
+const FEATURE_KEY_MAP: Record<PreferenceKey, ProfileFeatureKey> = {
   walkability: "walkability",
   transit: "transit",
   nightlife: "nightlife",
@@ -14,9 +25,7 @@ const FEATURE_KEY_MAP: Record<PreferenceKey, keyof NeighborhoodFeatures> = {
   diversity: "diversity",
 };
 
-const FEATURE_LABELS: Record<keyof NeighborhoodFeatures, string> = {
-  id: "",
-  neighborhoodId: "",
+const FEATURE_LABELS: Record<ProfileFeatureKey, string> = {
   walkability: "Highly walkable streets",
   transit: "Excellent public transit",
   nightlife: "Vibrant nightlife and dining",
@@ -26,8 +35,6 @@ const FEATURE_LABELS: Record<keyof NeighborhoodFeatures, string> = {
   youngProfessionals: "Popular with young professionals",
   affordability: "Great rental affordability",
   diversity: "Rich cultural diversity",
-  dataSource: "",
-  updatedAt: "",
 };
 
 // Pure cosine similarity between two vectors
@@ -82,9 +89,9 @@ export function calculateBudgetFit(
 // Generate the top 3 natural language reasons for the match
 export function generateMatchReasons(
   userPrefs: PreferenceVector,
-  features: NeighborhoodFeatures
+  features: NeighborhoodProfile
 ): string[] {
-  const contributions: { key: keyof NeighborhoodFeatures; value: number }[] = [];
+  const contributions: { key: ProfileFeatureKey; value: number }[] = [];
 
   for (const [userKey, dbKey] of Object.entries(FEATURE_KEY_MAP)) {
     const userVal = userPrefs[userKey as PreferenceKey] ?? 0.5;
@@ -108,8 +115,8 @@ export function scoreNeighborhoods(
   budgetMin: number,
   budgetMax: number,
   neighborhoodsWithFeatures: Array<{
-    neighborhood: Neighborhood;
-    features: NeighborhoodFeatures;
+    neighborhood: NeighborhoodProfile;
+    features: NeighborhoodProfile;
     city: City;
   }>
 ): MatchResult[] {

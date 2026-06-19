@@ -5,6 +5,10 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { MatchResult } from "@/lib/matching/types";
 
+const HIGHLIGHT_SOURCE_ID = "selected-neighborhood-highlight";
+const HIGHLIGHT_FILL_LAYER_ID = "selected-neighborhood-highlight-fill";
+const HIGHLIGHT_RING_LAYER_ID = "selected-neighborhood-highlight-ring";
+
 interface MapViewProps {
   matches: MatchResult[];
   selectedId: string | null;
@@ -16,6 +20,72 @@ export default function MapView({ matches, selectedId, onSelect, center }: MapVi
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<Record<string, maplibregl.Marker>>({});
+  const selectedAreaMarkerRef = useRef<maplibregl.Marker | null>(null);
+
+  const selectedMatch = matches.find((match) => match.neighborhoodId === selectedId);
+
+  const ensureHighlightLayers = (currentMap: maplibregl.Map) => {
+    if (!currentMap.getSource(HIGHLIGHT_SOURCE_ID)) {
+      currentMap.addSource(HIGHLIGHT_SOURCE_ID, {
+        type: "geojson",
+        data: {
+          type: "FeatureCollection",
+          features: [],
+        },
+      });
+    }
+
+    if (!currentMap.getLayer(HIGHLIGHT_FILL_LAYER_ID)) {
+      currentMap.addLayer({
+        id: HIGHLIGHT_FILL_LAYER_ID,
+        type: "circle",
+        source: HIGHLIGHT_SOURCE_ID,
+        paint: {
+          "circle-radius": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            10,
+            34,
+            12,
+            72,
+            14,
+            150,
+          ],
+          "circle-color": "#2563EB",
+          "circle-opacity": 0.14,
+          "circle-stroke-color": "#2563EB",
+          "circle-stroke-width": 1,
+          "circle-stroke-opacity": 0.35,
+        },
+      });
+    }
+
+    if (!currentMap.getLayer(HIGHLIGHT_RING_LAYER_ID)) {
+      currentMap.addLayer({
+        id: HIGHLIGHT_RING_LAYER_ID,
+        type: "circle",
+        source: HIGHLIGHT_SOURCE_ID,
+        paint: {
+          "circle-radius": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            10,
+            38,
+            12,
+            82,
+            14,
+            170,
+          ],
+          "circle-color": "transparent",
+          "circle-stroke-color": "#E8C547",
+          "circle-stroke-width": 3,
+          "circle-stroke-opacity": 0.85,
+        },
+      });
+    }
+  };
 
   // Initialize Map
   useEffect(() => {
@@ -48,6 +118,69 @@ export default function MapView({ matches, selectedId, onSelect, center }: MapVi
       duration: 1200,
     });
   }, [center]);
+
+  // Highlight selected neighborhood as an approximate area around its center.
+  useEffect(() => {
+    if (!map.current) return;
+
+    const currentMap = map.current;
+
+    selectedAreaMarkerRef.current?.remove();
+    selectedAreaMarkerRef.current = null;
+
+    if (selectedMatch) {
+      const areaEl = document.createElement("div");
+      areaEl.className =
+        "pointer-events-none h-44 w-44 rounded-full border-[3px] border-amber-400/90 bg-blue-500/20 shadow-[0_0_40px_rgba(37,99,235,0.35)]";
+      areaEl.style.zIndex = "1";
+
+      selectedAreaMarkerRef.current = new maplibregl.Marker({
+        element: areaEl,
+        anchor: "center",
+      })
+        .setLngLat([selectedMatch.lng, selectedMatch.lat])
+        .addTo(currentMap);
+    }
+
+    const updateHighlight = () => {
+      ensureHighlightLayers(currentMap);
+      const source = currentMap.getSource(HIGHLIGHT_SOURCE_ID) as
+        | maplibregl.GeoJSONSource
+        | undefined;
+      if (!source) return;
+
+      source.setData({
+        type: "FeatureCollection",
+        features: selectedMatch
+          ? [
+              {
+                type: "Feature",
+                properties: {
+                  id: selectedMatch.neighborhoodId,
+                  name: selectedMatch.neighborhoodName,
+                },
+                geometry: {
+                  type: "Point",
+                  coordinates: [selectedMatch.lng, selectedMatch.lat],
+                },
+              },
+            ]
+          : [],
+      });
+    };
+
+    if (currentMap.isStyleLoaded()) {
+      updateHighlight();
+      return;
+    }
+
+    currentMap.once("load", updateHighlight);
+
+    return () => {
+      selectedAreaMarkerRef.current?.remove();
+      selectedAreaMarkerRef.current = null;
+    };
+  }, [selectedMatch]);
 
   // Update markers
   useEffect(() => {
@@ -87,6 +220,7 @@ export default function MapView({ matches, selectedId, onSelect, center }: MapVi
       // Create HTML Element for Marker
       const el = document.createElement("div");
       el.className = `flex items-center justify-center rounded-full border-2 w-10 h-10 cursor-pointer transition-all duration-300 ${colorClass} ${scaleClass}`;
+      el.style.zIndex = match.neighborhoodId === selectedId ? "30" : "10";
       
       const scoreSpan = document.createElement("span");
       scoreSpan.className = `text-[13px] ${textClass}`;
@@ -95,7 +229,9 @@ export default function MapView({ matches, selectedId, onSelect, center }: MapVi
 
       // Tooltip/Label element
       const labelEl = document.createElement("div");
-      labelEl.className = "absolute -top-8 bg-white/95 backdrop-blur border border-slate-200 text-[11px] text-slate-700 px-2 py-0.5 rounded shadow pointer-events-none whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200";
+      labelEl.className = `absolute -top-8 bg-white/95 backdrop-blur border border-slate-200 text-[11px] text-slate-700 px-2 py-0.5 rounded shadow pointer-events-none whitespace-nowrap transition-opacity duration-200 ${
+        match.neighborhoodId === selectedId ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+      }`;
       labelEl.innerText = match.neighborhoodName;
       el.appendChild(labelEl);
       el.classList.add("group");

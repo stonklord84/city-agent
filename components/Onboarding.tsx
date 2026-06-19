@@ -194,39 +194,39 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   const percent = Math.round(((step - 1) / 2) * 100);
 
   return (
-    <div className="w-full max-w-2xl mx-auto bg-white rounded-4xl p-8 shadow-soft-xl relative overflow-hidden transition-all duration-500 ring-1 ring-slate-100">
+    <div className="w-full max-w-2xl mx-auto bg-white rounded-[28px] p-5 sm:p-6 shadow-soft-xl relative overflow-hidden transition-all duration-500 ring-1 ring-slate-100">
       {/* Progress Bar */}
-      <div className="w-full h-2 bg-slate-100 rounded-full mb-8 overflow-hidden">
+      <div className="w-full h-1.5 bg-slate-100 rounded-full mb-5 overflow-hidden">
         <div
           className="h-full bg-blue-500 rounded-full transition-all duration-300"
           style={{ width: `${percent}%` }}
         />
       </div>
 
-      <div className="min-h-[360px] flex flex-col justify-between">
+      <div className="min-h-[300px] flex flex-col justify-between">
         {/* STEP 1: Destination City */}
         {step === 1 && (
           <div className="animate-fadeIn">
             <span className="text-blue-600 text-xs font-semibold uppercase tracking-wider">Step 1 of 3</span>
-            <h2 className="text-3xl font-bold text-slate-900 mt-2 mb-6">
+            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mt-1.5 mb-3">
               Where are you moving?
             </h2>
-            <p className="text-slate-500 text-sm mb-6">
+            <p className="text-slate-500 text-sm mb-4">
               Pick one of the three cities we support right now.
             </p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {CITIES.map((city) => (
                 <button
                   key={city.slug}
                   onClick={() => handleCitySelect(city.slug)}
-                  className={`rounded-3xl p-5 text-left transition-all duration-300 ${
+                  className={`rounded-2xl p-4 text-left transition-all duration-300 ${
                     destCitySlug === city.slug
                       ? "bg-blue-500 text-white shadow-brand scale-[1.03] -rotate-1"
                       : "bg-slate-50 hover:bg-blue-50 hover:scale-[1.02] hover:-rotate-1"
                   }`}
                 >
                   <h3 className={`text-lg font-bold ${destCitySlug === city.slug ? "text-white" : "text-slate-900"}`}>{city.name}</h3>
-                  <span className={`text-xs block mb-3 ${destCitySlug === city.slug ? "text-white/80" : "text-slate-500"}`}>{city.country}</span>
+                  <span className={`text-xs block mb-2 ${destCitySlug === city.slug ? "text-white/80" : "text-slate-500"}`}>{city.country}</span>
                   <p className={`text-xs leading-relaxed ${destCitySlug === city.slug ? "text-white/90" : "text-slate-500"}`}>{city.desc}</p>
                 </button>
               ))}
@@ -238,7 +238,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
         {step === 2 && (
           <div className="animate-fadeIn">
             <span className="text-blue-600 text-xs font-semibold uppercase tracking-wider">Step 2 of 3</span>
-            <h2 className="text-3xl font-bold text-slate-900 mt-2 mb-6">
+            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mt-1.5 mb-5">
               Tell us one place you liked living.
             </h2>
             <div className="space-y-4">
@@ -271,7 +271,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
         {step === 3 && (
           <div className="animate-fadeIn">
             <span className="text-blue-600 text-xs font-semibold uppercase tracking-wider">Step 3 of 3</span>
-            <h2 className="text-3xl font-bold text-slate-900 mt-2 mb-2">
+            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mt-1.5 mb-2">
               What&apos;s your monthly budget?
             </h2>
             <p className="text-slate-500 text-sm mb-8">
@@ -323,7 +323,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
         )}
 
         {/* Buttons Panel */}
-        <div className="flex justify-between items-center mt-10 pt-6 border-t border-slate-100">
+        <div className="flex justify-between items-center mt-6 pt-5 border-t border-slate-100">
           <div>
             {step > 1 && (
               <button

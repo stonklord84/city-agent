@@ -2,8 +2,6 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import type { NavLink } from "@/types";
-import { NAV_LINKS } from "@/lib/data";
 
 // ─── Logo Mark ────────────────────────────────────────────────────────────────
 
@@ -22,19 +20,6 @@ function LogoMark({ size = 28 }: { size?: number }) {
         <circle cx="8" cy="6" r="1.75" fill="#A6E8BB" />
       </svg>
     </div>
-  );
-}
-
-// ─── Nav Link Item ────────────────────────────────────────────────────────────
-
-function NavLinkItem({ link }: { link: NavLink }) {
-  return (
-    <a
-      href={link.href}
-      className="text-sm text-slate-500 hover:text-slate-900 transition-colors duration-150 font-normal"
-    >
-      {link.label}
-    </a>
   );
 }
 
@@ -77,27 +62,6 @@ function MobileMenu({
               <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
           </button>
-        </div>
-        <nav className="flex flex-col gap-1 p-4">
-          {NAV_LINKS.map((link) => (
-            <a
-              key={link.href}
-              href={link.href}
-              onClick={onClose}
-              className="text-slate-700 text-[15px] font-normal px-3 py-3 rounded-xl hover:bg-blue-50 hover:text-blue-700 transition-colors"
-            >
-              {link.label}
-            </a>
-          ))}
-        </nav>
-        <div className="p-4 mt-auto border-t border-slate-100">
-          <a
-            href="#search"
-            onClick={onClose}
-            className="block w-full text-center bg-blue-600 text-white text-sm font-medium py-3 rounded-xl hover:bg-blue-700 transition-colors"
-          >
-            Try for free
-          </a>
         </div>
       </div>
     </div>
@@ -144,24 +108,6 @@ export default function Navbar() {
                 City Agent
               </span>
             </Link>
-
-            {/* Desktop links */}
-            <nav
-              className="hidden md:flex items-center gap-7"
-              aria-label="Main navigation"
-            >
-              {NAV_LINKS.map((link) => (
-                <NavLinkItem key={link.href} link={link} />
-              ))}
-            </nav>
-
-            {/* Desktop CTA */}
-            <a
-              href="#search"
-              className="hidden md:inline-flex items-center gap-2 text-[13px] font-bold bg-blue-600 text-white px-5 py-2 rounded-full hover:bg-blue-500 hover:scale-105 active:scale-95 transition-all duration-150 shadow-brand"
-            >
-              Try for free
-            </a>
 
             {/* Mobile hamburger */}
             <button

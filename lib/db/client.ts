@@ -49,7 +49,7 @@ const pool = new Pool({
   database: process.env.PGDATABASE || "postgres",
   password: () => signer.getAuthToken(),
   port: Number(process.env.PGPORT),
-  ssl: false,
+  ssl: { rejectUnauthorized: false},
   max: 20,
 });
 

@@ -1,4 +1,4 @@
-import "server-only";
+//import "server-only";
 
 // import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 // import postgres from "postgres";
@@ -49,7 +49,7 @@ const pool = new Pool({
   database: process.env.PGDATABASE || "postgres",
   password: () => signer.getAuthToken(),
   port: Number(process.env.PGPORT),
-  ssl: { rejectUnauthorized: false },
+  ssl: false,
   max: 20,
 });
 

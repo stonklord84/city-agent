@@ -27,4 +27,26 @@ export interface MatchResult {
   summary: string;
   vibeTags: string[];
   bestForTags: string[];
+  externalMetrics?: {
+    zillowZoriCityRentUsd?: number;
+    zillowZoriRegionName?: string;
+    zillowZoriRegionType?: string;
+    zillowZoriAsOf?: string;
+    epaWalkabilityIndex?: number;
+    epaIntersectionDensity?: number;
+    epaTransitProximityMeters?: number;
+    epaEmploymentMix?: number;
+    epaEmploymentHousingMix?: number;
+    epaBlockGroupGeoid?: string;
+    epaWalkabilityMatchedAt?: string;
+  };
+  dataSources?: Record<
+    string,
+    {
+      name: string;
+      url: string;
+      fetchedAt: string;
+      notes?: string;
+    }
+  >;
 }

@@ -12,9 +12,14 @@
     "db:migrate": "drizzle-kit migrate",
     "db:setup:minimal": "tsx lib/db/setup-minimal-schema.ts",
     "db:enrich": "tsx lib/db/enrich-location-profiles.ts",
-    "db:fill:groq": "tsx lib/db/fill-location-profiles-with-groq.ts"
+    "db:fill:groq": "tsx lib/db/fill-location-profiles-with-groq.ts",
+    "db:enrich:external": "tsx lib/db/enrich-external-datasets.ts",
+    "db:copy:aurora": "tsx lib/db/copy-neon-to-aurora.ts",
+    "db:export:sql": "tsx lib/db/export-neon-to-sql.ts",
+    "db:test:data-api": "tsx lib/db/test-aurora-data-api.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-rds-data": "^3.1073.0",
     "@aws-sdk/rds-signer": "^3.1071.0",
     "@tailwindcss/postcss": "^4.3.1",
     "@vercel/functions": "^3.7.1",

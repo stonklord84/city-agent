@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState, useTransition } from "react";
+import { Suspense, useEffect, useMemo, useState, useTransition } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -42,6 +42,12 @@ type NearbyPlace = {
   lng?: number;
 };
 
+type ChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+  createdAt?: string;
+};
+
 const PREFERENCE_LABELS: Record<string, string> = {
   walkability: "Walkability",
   transit: "Public Transit",
@@ -80,6 +86,84 @@ const CATEGORY_STYLES: Record<NearbyPlace["category"], string> = {
   practical: "bg-teal-50 text-teal-600",
 };
 
+function formatUsd(value?: number) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "Not loaded";
+  return `$${Math.round(value).toLocaleString()}`;
+}
+
+function formatNumber(value?: number, digits = 1) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "Not loaded";
+  return value.toFixed(digits);
+}
+
+function formatDate(value?: string) {
+  if (!value) return "Unknown date";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function StatCard({
+  label,
+  value,
+  caption,
+  tone = "blue",
+}: {
+  label: string;
+  value: string;
+  caption: string;
+  tone?: "blue" | "amber" | "teal" | "slate";
+}) {
+  const styles = {
+    blue: "bg-blue-50 text-blue-700 ring-blue-100",
+    amber: "bg-amber-50 text-amber-700 ring-amber-100",
+    teal: "bg-teal-50 text-teal-700 ring-teal-100",
+    slate: "bg-slate-50 text-slate-700 ring-slate-100",
+  };
+
+  return (
+    <div className={`rounded-2xl p-4 ring-1 ${styles[tone]}`}>
+      <div className="text-[10px] font-bold uppercase tracking-wider opacity-70">
+        {label}
+      </div>
+      <div className="mt-1 text-2xl font-black tabular-nums text-slate-950">
+        {value}
+      </div>
+      <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
+        {caption}
+      </p>
+    </div>
+  );
+}
+
+function MeterRow({
+  label,
+  value,
+  note,
+}: {
+  label: string;
+  value: number;
+  note?: string;
+}) {
+  const percent = Math.max(0, Math.min(100, Math.round(value * 100)));
+
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between gap-3 text-xs">
+        <span className="font-semibold text-slate-700">{label}</span>
+        <span className="font-mono text-slate-500">{percent}%</span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+        <div className="h-full rounded-full bg-blue-500" style={{ width: `${percent}%` }} />
+      </div>
+      {note && <p className="mt-1 text-[10px] text-slate-400">{note}</p>}
+    </div>
+  );
+}
+
 function ResultsPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -100,17 +184,45 @@ function ResultsPageContent() {
   const [sliderPrefs, setSliderPrefs] = useState<Record<string, number>>({});
   // Lifestyle weights panel is de-emphasized and collapsed by default
   const [showWeights, setShowWeights] = useState(false);
+  const [showStatsPanel, setShowStatsPanel] = useState(false);
   
   // Chat state
-  const [messages, setMessages] = useState<Array<{ role: string; content: string }>>([
+  const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: "assistant",
       content: "I loaded your neighborhood matches. Pick a marker or a match card, then ask me to compare options, explain tradeoffs, or find places close by.",
+      createdAt: new Date().toISOString(),
     },
   ]);
   const [chatInput, setChatInput] = useState("");
 
   const citySlug = searchParams.get("city") || "nyc";
+
+  const persistProfileState = async (updates: {
+    matchedNeighborhoods?: Array<{
+      neighborhoodProfileId: string;
+      score: number;
+      reasons: string[];
+    }>;
+    chatMessages?: ChatMessage[];
+    lastSelectedNeighborhoodId?: string | null;
+  }) => {
+    const profileId = session?.profileId;
+    if (!profileId) return;
+
+    try {
+      await fetch("/api/user-profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          profileId,
+          ...updates,
+        }),
+      });
+    } catch (error) {
+      console.error("Profile state persist failed:", error);
+    }
+  };
 
   // 1. Load data on mount
   useEffect(() => {
@@ -159,6 +271,9 @@ function ResultsPageContent() {
                       score: match.score,
                       reasons: match.reasons,
                     })),
+                  lastSelectedNeighborhoodId:
+                    fetchedMatches[0]?.neighborhoodId ?? null,
+                  chatMessages: messages,
                 }),
               }).catch((error) => {
                 console.error("Profile match save failed:", error);
@@ -186,7 +301,7 @@ function ResultsPageContent() {
     const fetchPlaces = async () => {
       setLoadingPlaces(true);
       try {
-        const res = await fetch(`/api/places?neighborhoodId=${selectedId}&limit=12`);
+        const res = await fetch(`/api/places?neighborhoodId=${selectedId}&limit=30`);
         const payload = await res.json();
         if (payload.data) {
           setNearbyPlaces(payload.data);
@@ -200,6 +315,14 @@ function ResultsPageContent() {
 
     fetchPlaces();
   }, [selectedId]);
+
+  useEffect(() => {
+    if (!session?.profileId || !selectedId) return;
+
+    persistProfileState({
+      lastSelectedNeighborhoodId: selectedId,
+    });
+  }, [selectedId, session?.profileId]);
 
   // 3. Client-side re-scoring on slider change
   const handleSliderChange = (key: string, value: number) => {
@@ -273,7 +396,14 @@ function ResultsPageContent() {
     if (!chatInput.trim() || chatLoading) return;
 
     const userMessage = chatInput;
-    const nextMessages = [...messages, { role: "user", content: userMessage }];
+    const nextMessages: ChatMessage[] = [
+      ...messages,
+      {
+        role: "user",
+        content: userMessage,
+        createdAt: new Date().toISOString(),
+      },
+    ];
     setMessages(nextMessages);
     setChatInput("");
     setChatLoading(true);
@@ -298,26 +428,55 @@ function ResultsPageContent() {
         throw new Error(payload.error || "Chat request failed.");
       }
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: payload.data?.message || "I could not find enough local context to answer that cleanly.",
-        },
-      ]);
+      const assistantMessage: ChatMessage = {
+        role: "assistant",
+        content: payload.data?.message || "I could not find enough local context to answer that cleanly.",
+        createdAt: new Date().toISOString(),
+      };
+      const persistedMessages = [...nextMessages, assistantMessage];
+      setMessages(persistedMessages);
+      persistProfileState({
+        chatMessages: persistedMessages,
+        lastSelectedNeighborhoodId: selectedId,
+      });
     } catch (err) {
       console.error(err);
       const currentSelected = matches.find((m) => m.neighborhoodId === selectedId);
       const fallbackText = currentSelected
         ? `Based on ${currentSelected.neighborhoodName}'s stored profile, it matches at ${currentSelected.score}% because of ${currentSelected.reasons.slice(0, 2).join(" and ").toLowerCase()}.`
         : "I could not load the local context for that question yet.";
-      setMessages((prev) => [...prev, { role: "assistant", content: fallbackText }]);
+      const persistedMessages: ChatMessage[] = [
+        ...nextMessages,
+        {
+          role: "assistant",
+          content: fallbackText,
+          createdAt: new Date().toISOString(),
+        },
+      ];
+      setMessages(persistedMessages);
+      persistProfileState({
+        chatMessages: persistedMessages,
+        lastSelectedNeighborhoodId: selectedId,
+      });
     } finally {
       setChatLoading(false);
     }
   };
 
   const selectedNeighborhood = matches.find((m) => m.neighborhoodId === selectedId);
+  const selectedExternalMetrics = selectedNeighborhood?.externalMetrics ?? {};
+  const hasNycExternalData =
+    citySlug === "nyc" &&
+    (typeof selectedExternalMetrics.zillowZoriCityRentUsd === "number" ||
+      typeof selectedExternalMetrics.epaWalkabilityIndex === "number");
+  const walkabilityOutOfTwenty =
+    typeof selectedExternalMetrics.epaWalkabilityIndex === "number"
+      ? selectedExternalMetrics.epaWalkabilityIndex
+      : undefined;
+  const walkabilityNormalized =
+    typeof walkabilityOutOfTwenty === "number"
+      ? Math.max(0, Math.min(1, walkabilityOutOfTwenty / 20))
+      : selectedNeighborhood?.features.walkability ?? 0.5;
   const placeCategoryCounts = nearbyPlaces.reduce(
     (counts, place) => {
       counts[place.category] = (counts[place.category] ?? 0) + 1;
@@ -333,9 +492,13 @@ function ResultsPageContent() {
       ]),
     ),
   ).slice(0, 6);
-  const mapCenter: [number, number] = selectedNeighborhood
-    ? [selectedNeighborhood.lng, selectedNeighborhood.lat]
-    : [-74.006, 40.7128]; // NYC default
+  const mapCenter = useMemo<[number, number]>(
+    () =>
+      selectedNeighborhood
+        ? [selectedNeighborhood.lng, selectedNeighborhood.lat]
+        : [-74.006, 40.7128],
+    [selectedNeighborhood?.lat, selectedNeighborhood?.lng],
+  );
 
   if (loading) {
     return (
@@ -528,6 +691,25 @@ function ResultsPageContent() {
               onSelect={setSelectedId}
               center={mapCenter}
             />
+            {selectedNeighborhood && (
+              <button
+                type="button"
+                onClick={() => setShowStatsPanel(true)}
+                className="absolute bottom-10 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3 rounded-full border border-slate-200 bg-white/95 px-4 py-2.5 text-left text-xs font-bold text-slate-900 shadow-[0_12px_34px_rgba(15,23,42,0.18)] backdrop-blur transition-all hover:-translate-y-0.5 hover:shadow-brand"
+              >
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-white">
+                  {hasNycExternalData ? "NY" : "%"}
+                </span>
+                <span>
+                  Compare stats
+                  <span className="block text-[10px] font-medium text-slate-500">
+                    {hasNycExternalData
+                      ? "NYC public data loaded"
+                      : "Lifestyle match breakdown"}
+                  </span>
+                </span>
+              </button>
+            )}
           </section>
 
           {/* Details & Chat Overlay Sidebar */}
@@ -643,7 +825,7 @@ function ResultsPageContent() {
                   )}
 
                   <div className="space-y-2">
-                    {nearbyPlaces.slice(0, 8).map((place) => (
+                    {nearbyPlaces.slice(0, 12).map((place) => (
                       <div
                         key={place.id}
                         className={`bg-slate-50 hover:bg-white hover:shadow-soft border-l-4 p-4 rounded-2xl transition-all ${
@@ -719,6 +901,159 @@ function ResultsPageContent() {
               </form>
             </div>
           </section>
+
+          {selectedNeighborhood && (
+            <div
+              className={`absolute inset-x-0 bottom-0 z-40 mx-3 rounded-t-[28px] border border-slate-200 bg-white shadow-[0_-24px_70px_rgba(15,23,42,0.22)] transition-transform duration-300 ease-out md:mx-6 ${
+                showStatsPanel ? "translate-y-0" : "translate-y-full"
+              }`}
+            >
+              <div className="mx-auto h-full max-w-6xl">
+                <button
+                  type="button"
+                  onClick={() => setShowStatsPanel((value) => !value)}
+                  className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left md:px-6"
+                  aria-expanded={showStatsPanel}
+                >
+                  <div className="flex items-center gap-4">
+                    <span className="h-1.5 w-12 rounded-full bg-slate-300" aria-hidden />
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-blue-700">
+                        {session?.source.sourceNeighborhood
+                          ? `${session.source.sourceNeighborhood} -> New York`
+                          : "New York stats"}
+                      </p>
+                      <h3 className="text-base font-black text-slate-950">
+                        {selectedNeighborhood.neighborhoodName} match evidence
+                      </h3>
+                    </div>
+                  </div>
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+                    {showStatsPanel ? "Hide" : "Open"}
+                  </span>
+                </button>
+
+                <div className="max-h-[58vh] overflow-y-auto border-t border-slate-100 px-5 pb-6 pt-5 md:px-6">
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div className="rounded-3xl bg-slate-950 p-5 text-white">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-blue-200">
+                        Your old-place signal
+                      </div>
+                      <h4 className="mt-2 text-xl font-black">
+                        {session?.source.sourceNeighborhood || "Your source place"}
+                      </h4>
+                      <p className="mt-3 text-sm leading-relaxed text-slate-300">
+                        {session?.source.likes ||
+                          "We use what you liked before as the baseline for your New York matches."}
+                      </p>
+                    </div>
+
+                    <StatCard
+                      label="NYC rent baseline"
+                      value={formatUsd(selectedExternalMetrics.zillowZoriCityRentUsd)}
+                      caption={
+                        selectedExternalMetrics.zillowZoriAsOf
+                          ? `Zillow ZORI city-level observed rent, ${formatDate(selectedExternalMetrics.zillowZoriAsOf)}. This is not neighborhood-specific yet.`
+                          : "Experimental public rent baseline not loaded for this match."
+                      }
+                      tone="amber"
+                    />
+
+                    <StatCard
+                      label="EPA walkability"
+                      value={
+                        typeof walkabilityOutOfTwenty === "number"
+                          ? `${formatNumber(walkabilityOutOfTwenty, 1)} / 20`
+                          : `${Math.round(selectedNeighborhood.features.walkability * 100)}%`
+                      }
+                      caption={
+                        selectedExternalMetrics.epaBlockGroupGeoid
+                          ? `Matched by neighborhood center to Census block group ${selectedExternalMetrics.epaBlockGroupGeoid}.`
+                          : "Using our internal walkability score because EPA data is not loaded here."
+                      }
+                      tone="teal"
+                    />
+                  </div>
+
+                  <div className="mt-5 rounded-3xl border border-slate-200 bg-white p-5">
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                      <div>
+                        <h4 className="text-sm font-black text-slate-950">
+                          Why this neighborhood is being suggested
+                        </h4>
+                        <p className="text-xs text-slate-500">
+                          Your extracted preferences compared with the selected neighborhood profile.
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-black text-blue-700">
+                        {selectedNeighborhood.score}% fit
+                      </span>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-4">
+                      <MeterRow
+                        label="Lifestyle similarity"
+                        value={selectedNeighborhood.scoreBreakdown.similarity / 100}
+                        note="How close the neighborhood vector is to what you described."
+                      />
+                      <MeterRow
+                        label="Budget fit"
+                        value={selectedNeighborhood.scoreBreakdown.budgetFit / 100}
+                        note="How well your budget overlaps with our stored rent range."
+                      />
+                      <MeterRow
+                        label="EPA walkability signal"
+                        value={walkabilityNormalized}
+                        note="NYC-only public dataset signal."
+                      />
+                      <MeterRow
+                        label="Internal transit score"
+                        value={selectedNeighborhood.features.transit}
+                        note="Profile score used by matching today."
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-5 grid gap-3 md:grid-cols-4">
+                    {(Object.keys(CATEGORY_LABELS) as NearbyPlace["category"][]).map((category) => (
+                      <div
+                        key={category}
+                        className={`rounded-2xl px-4 py-3 ${CATEGORY_STYLES[category]}`}
+                      >
+                        <div className="text-[10px] font-black uppercase tracking-wider">
+                          {CATEGORY_LABELS[category]}
+                        </div>
+                        <div className="mt-1 text-2xl font-black leading-tight">
+                          {placeCategoryCounts[category] ?? 0}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-5 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                    {nearbyPlaces.slice(0, 12).map((place) => (
+                      <div
+                        key={place.id}
+                        className="rounded-2xl border border-slate-200 bg-slate-50 p-3"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <h4 className="truncate text-xs font-black text-slate-900">
+                            {place.name}
+                          </h4>
+                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold ${CATEGORY_STYLES[place.category]}`}>
+                            {place.category}
+                          </span>
+                        </div>
+                        <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-slate-500">
+                          {place.summary}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </main>
       </div>
     </div>

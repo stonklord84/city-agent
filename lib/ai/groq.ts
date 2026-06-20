@@ -1,3 +1,8 @@
+import {
+  getCachedApiResponse,
+  setCachedApiResponse,
+} from "@/lib/db/api-cache";
+
 export type GroqMessage = {
   role: "system" | "user" | "assistant";
   content: string;
@@ -27,6 +32,30 @@ export async function createGroqChatCompletion(messages: GroqMessage[]) {
     throw new Error("GROQ_API_KEY is required for preference extraction.");
   }
 
+  const requestPayload = {
+    model: GROQ_MODEL,
+    messages,
+    temperature: 0,
+    response_format: { type: "json_object" },
+  };
+
+  const cacheInput = {
+    provider: "groq",
+    operation: "chat.completions",
+    model: GROQ_MODEL,
+    requestPayload,
+  };
+
+  try {
+    const cached = await getCachedApiResponse(cacheInput);
+    if (cached) {
+      console.log("[Groq] Cache hit.");
+      return cached;
+    }
+  } catch (error) {
+    console.warn("[Groq] Cache lookup failed; calling API.", error);
+  }
+
   let attempts = 0;
   const maxAttempts = 6;
   let delay = 10000;
@@ -40,12 +69,7 @@ export async function createGroqChatCompletion(messages: GroqMessage[]) {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          model: GROQ_MODEL,
-          messages,
-          temperature: 0,
-          response_format: { type: "json_object" },
-        }),
+        body: JSON.stringify(requestPayload),
       });
 
       if (response.status === 429) {
@@ -66,6 +90,15 @@ export async function createGroqChatCompletion(messages: GroqMessage[]) {
 
       if (!content) {
         throw new Error("Groq returned an empty response.");
+      }
+
+      try {
+        await setCachedApiResponse({
+          ...cacheInput,
+          content,
+        });
+      } catch (error) {
+        console.warn("[Groq] Cache write failed.", error);
       }
 
       return content;

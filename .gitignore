@@ -51,3 +51,13 @@ PLAN.md
 # location-research/Toronto Research.md
 # location-research/NYC_Neighborhood_Research.md
 .env*
+
+# local database exports / AWS migration artifacts
+db-backups/
+global-bundle.pem
+*.dump
+
+# one-off Aurora migration helpers
+lib/db/copy-neon-to-aurora.ts
+lib/db/export-neon-to-sql.ts
+lib/db/test-aurora-data-api.ts

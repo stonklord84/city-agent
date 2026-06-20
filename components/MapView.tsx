@@ -45,6 +45,8 @@ const PLACE_CATEGORY_STYLE = {
 export default function MapView({ matches, places, selectedId, onSelect, center }: MapViewProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
+  const initialCenter = useRef(center);
+  const lastCenter = useRef<[number, number] | null>(null);
   const markersRef = useRef<Record<string, maplibregl.Marker>>({});
   const placeMarkersRef = useRef<maplibregl.Marker[]>([]);
   const selectedAreaMarkerRef = useRef<maplibregl.Marker | null>(null);
@@ -121,7 +123,7 @@ export default function MapView({ matches, places, selectedId, onSelect, center 
     map.current = new maplibregl.Map({
       container: mapContainer.current,
       style: "https://tiles.openfreemap.org/styles/liberty",
-      center: center,
+      center: initialCenter.current,
       zoom: 12,
       attributionControl: false,
     });
@@ -136,15 +138,25 @@ export default function MapView({ matches, places, selectedId, onSelect, center 
         map.current = null;
       }
     };
-  }, [center]);
+  }, []);
 
   // Update map center when it changes
   useEffect(() => {
     if (!map.current) return;
+
+    if (
+      lastCenter.current &&
+      lastCenter.current[0] === center[0] &&
+      lastCenter.current[1] === center[1]
+    ) {
+      return;
+    }
+
+    lastCenter.current = center;
     map.current.easeTo({
       center: center,
       zoom: map.current.getZoom() > 11 ? map.current.getZoom() : 12,
-      duration: 1200,
+      duration: 650,
     });
   }, [center]);
 
@@ -289,17 +301,17 @@ export default function MapView({ matches, places, selectedId, onSelect, center 
 
     places
       .filter((place) => typeof place.lat === "number" && typeof place.lng === "number")
-      .slice(0, 16)
+      .slice(0, 30)
       .forEach((place) => {
         const style = PLACE_CATEGORY_STYLE[place.category];
         const el = document.createElement("div");
         el.className =
-          "group relative flex h-7 w-7 cursor-default items-center justify-center rounded-full border-2 border-white shadow-[0_6px_18px_rgba(15,23,42,0.22)]";
+          "group relative flex h-5 w-5 cursor-pointer items-center justify-center rounded-full border-2 border-white shadow-[0_5px_14px_rgba(15,23,42,0.2)] transition-transform hover:scale-125";
         el.style.backgroundColor = style.color;
         el.style.zIndex = "25";
 
         const dot = document.createElement("span");
-        dot.className = "h-2 w-2 rounded-full bg-white";
+        dot.className = "h-1.5 w-1.5 rounded-full bg-white";
         el.appendChild(dot);
 
         const labelEl = document.createElement("div");
@@ -322,17 +334,17 @@ export default function MapView({ matches, places, selectedId, onSelect, center 
   return (
     <div className="w-full h-full relative rounded-2xl overflow-hidden border border-slate-200 bg-white">
       <div ref={mapContainer} className="w-full h-full" />
-      <div className="pointer-events-none absolute bottom-4 left-4 rounded-2xl border border-slate-200 bg-white/95 px-3.5 py-3 text-xs text-slate-600 shadow-soft-sm backdrop-blur">
-        <div className="mb-2 font-bold text-slate-900">Map layers</div>
-        <div className="space-y-1.5">
+      <div className="pointer-events-none absolute bottom-4 left-4 rounded-2xl border border-slate-200 bg-white/95 px-3 py-2.5 text-[11px] text-slate-600 shadow-soft-sm backdrop-blur">
+        <div className="mb-1.5 font-bold text-slate-900">Map</div>
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
           <div className="flex items-center gap-2">
-            <span className="h-3 w-3 rounded-full border-2 border-amber-400 bg-blue-500/30" />
-            <span>Selected neighborhood</span>
+            <span className="h-2.5 w-2.5 rounded-full border-2 border-amber-400 bg-blue-500/30" />
+            <span>Area</span>
           </div>
           {Object.entries(PLACE_CATEGORY_STYLE).map(([category, style]) => (
             <div key={category} className="flex items-center gap-2">
               <span
-                className="h-3 w-3 rounded-full border border-white shadow"
+                className="h-2.5 w-2.5 rounded-full border border-white shadow"
                 style={{ backgroundColor: style.color }}
               />
               <span>{style.label}</span>

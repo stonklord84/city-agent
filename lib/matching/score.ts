@@ -175,6 +175,8 @@ export function scoreNeighborhoods(
       summary: neighborhood.summary,
       vibeTags: neighborhood.vibeTags,
       bestForTags: neighborhood.bestForTags,
+      externalMetrics: neighborhood.externalMetrics,
+      dataSources: neighborhood.dataSources,
     } as MatchResult;
   });
 

@@ -36,6 +36,12 @@ type UserProfilePayload = {
     score: number;
     reasons: string[];
   }>;
+  chatMessages?: Array<{
+    role: "user" | "assistant";
+    content: string;
+    createdAt?: string;
+  }>;
+  lastSelectedNeighborhoodId?: string | null;
 };
 
 function readNumber(value: unknown, fallback: number) {
@@ -47,6 +53,24 @@ function readPreference(
   key: FeatureKey,
 ) {
   return Math.min(1, Math.max(0, readNumber(preferences?.[key], 0.5)));
+}
+
+function normalizeChatMessages(messages: UserProfilePayload["chatMessages"]) {
+  const now = new Date().toISOString();
+
+  return (messages ?? [])
+    .filter(
+      (message) =>
+        (message.role === "user" || message.role === "assistant") &&
+        typeof message.content === "string" &&
+        message.content.trim().length > 0,
+    )
+    .slice(-30)
+    .map((message) => ({
+      role: message.role,
+      content: message.content.trim(),
+      createdAt: message.createdAt || now,
+    }));
 }
 
 async function getCityId(citySlug: string) {
@@ -100,6 +124,8 @@ export async function POST(request: Request) {
         affordabilityWeight: readPreference(preferences, "affordability"),
         diversityWeight: readPreference(preferences, "diversity"),
         matchedNeighborhoods: body.matchedNeighborhoods ?? [],
+        chatMessages: normalizeChatMessages(body.chatMessages),
+        lastSelectedNeighborhoodId: body.lastSelectedNeighborhoodId ?? null,
         sourcePlaceContext: {
           sourceNeighborhood: source.sourceNeighborhood ?? "",
           sourceCity: source.sourceCity ?? "",
@@ -135,12 +161,25 @@ export async function PATCH(request: Request) {
       );
     }
 
+    const updates: Partial<typeof userProfiles.$inferInsert> = {
+      updatedAt: sql`now()` as unknown as Date,
+    };
+
+    if (body.matchedNeighborhoods) {
+      updates.matchedNeighborhoods = body.matchedNeighborhoods;
+    }
+
+    if (body.chatMessages) {
+      updates.chatMessages = normalizeChatMessages(body.chatMessages);
+    }
+
+    if ("lastSelectedNeighborhoodId" in body) {
+      updates.lastSelectedNeighborhoodId = body.lastSelectedNeighborhoodId ?? null;
+    }
+
     await db
       .update(userProfiles)
-      .set({
-        matchedNeighborhoods: body.matchedNeighborhoods ?? [],
-        updatedAt: sql`now()`,
-      })
+      .set(updates)
       .where(eq(userProfiles.id, body.profileId));
 
     return NextResponse.json({ data: { profileId: body.profileId } });

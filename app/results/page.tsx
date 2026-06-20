@@ -38,6 +38,8 @@ type NearbyPlace = {
   priceRange?: string;
   vibeTags: string[];
   bestForTags: string[];
+  lat?: number;
+  lng?: number;
 };
 
 const PREFERENCE_LABELS: Record<string, string> = {
@@ -521,6 +523,7 @@ function ResultsPageContent() {
           <section className="flex-1 p-6 relative flex flex-col h-1/2 md:h-full min-h-0">
             <MapView
               matches={matches}
+              places={nearbyPlaces}
               selectedId={selectedId}
               onSelect={setSelectedId}
               center={mapCenter}

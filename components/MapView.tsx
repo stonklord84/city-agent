@@ -11,15 +11,42 @@ const HIGHLIGHT_RING_LAYER_ID = "selected-neighborhood-highlight-ring";
 
 interface MapViewProps {
   matches: MatchResult[];
+  places: Array<{
+    id: string;
+    name: string;
+    category: "food" | "nightlife" | "wellness" | "practical";
+    lat?: number;
+    lng?: number;
+  }>;
   selectedId: string | null;
   onSelect: (id: string) => void;
   center: [number, number]; // [lng, lat]
 }
 
-export default function MapView({ matches, selectedId, onSelect, center }: MapViewProps) {
+const PLACE_CATEGORY_STYLE = {
+  food: {
+    label: "Food",
+    color: "#F59E0B",
+  },
+  nightlife: {
+    label: "Nightlife",
+    color: "#E11D48",
+  },
+  wellness: {
+    label: "Wellness",
+    color: "#10B981",
+  },
+  practical: {
+    label: "Daily",
+    color: "#14B8A6",
+  },
+} as const;
+
+export default function MapView({ matches, places, selectedId, onSelect, center }: MapViewProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<Record<string, maplibregl.Marker>>({});
+  const placeMarkersRef = useRef<maplibregl.Marker[]>([]);
   const selectedAreaMarkerRef = useRef<maplibregl.Marker | null>(null);
 
   const selectedMatch = matches.find((match) => match.neighborhoodId === selectedId);
@@ -103,6 +130,8 @@ export default function MapView({ matches, selectedId, onSelect, center }: MapVi
 
     return () => {
       if (map.current) {
+        selectedAreaMarkerRef.current?.remove();
+        placeMarkersRef.current.forEach((marker) => marker.remove());
         map.current.remove();
         map.current = null;
       }
@@ -249,9 +278,68 @@ export default function MapView({ matches, selectedId, onSelect, center }: MapVi
     });
   }, [matches, selectedId, onSelect]);
 
+  // Update nearby place markers for the selected neighborhood.
+  useEffect(() => {
+    if (!map.current) return;
+
+    const currentMap = map.current;
+
+    placeMarkersRef.current.forEach((marker) => marker.remove());
+    placeMarkersRef.current = [];
+
+    places
+      .filter((place) => typeof place.lat === "number" && typeof place.lng === "number")
+      .slice(0, 16)
+      .forEach((place) => {
+        const style = PLACE_CATEGORY_STYLE[place.category];
+        const el = document.createElement("div");
+        el.className =
+          "group relative flex h-7 w-7 cursor-default items-center justify-center rounded-full border-2 border-white shadow-[0_6px_18px_rgba(15,23,42,0.22)]";
+        el.style.backgroundColor = style.color;
+        el.style.zIndex = "25";
+
+        const dot = document.createElement("span");
+        dot.className = "h-2 w-2 rounded-full bg-white";
+        el.appendChild(dot);
+
+        const labelEl = document.createElement("div");
+        labelEl.className =
+          "pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-slate-200 bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-slate-700 opacity-0 shadow transition-opacity duration-150 group-hover:opacity-100";
+        labelEl.innerText = place.name;
+        el.appendChild(labelEl);
+
+        const marker = new maplibregl.Marker({
+          element: el,
+          anchor: "center",
+        })
+          .setLngLat([place.lng as number, place.lat as number])
+          .addTo(currentMap);
+
+        placeMarkersRef.current.push(marker);
+      });
+  }, [places]);
+
   return (
     <div className="w-full h-full relative rounded-2xl overflow-hidden border border-slate-200 bg-white">
       <div ref={mapContainer} className="w-full h-full" />
+      <div className="pointer-events-none absolute bottom-4 left-4 rounded-2xl border border-slate-200 bg-white/95 px-3.5 py-3 text-xs text-slate-600 shadow-soft-sm backdrop-blur">
+        <div className="mb-2 font-bold text-slate-900">Map layers</div>
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <span className="h-3 w-3 rounded-full border-2 border-amber-400 bg-blue-500/30" />
+            <span>Selected neighborhood</span>
+          </div>
+          {Object.entries(PLACE_CATEGORY_STYLE).map(([category, style]) => (
+            <div key={category} className="flex items-center gap-2">
+              <span
+                className="h-3 w-3 rounded-full border border-white shadow"
+                style={{ backgroundColor: style.color }}
+              />
+              <span>{style.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

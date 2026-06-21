@@ -9,6 +9,7 @@ The app is intentionally using a small three-table model:
 cities
   └── neighborhood_profiles
   └── user_profiles
+api_response_cache
 ```
 
 Current development storage is Neon Postgres via `DATABASE_URL`.
@@ -81,6 +82,8 @@ CREATE TABLE neighborhood_profiles (
   places jsonb NOT NULL DEFAULT '[]'::jsonb,
   commute_estimates jsonb NOT NULL DEFAULT '[]'::jsonb,
   llm_profile jsonb NOT NULL DEFAULT '{}'::jsonb,
+  external_metrics jsonb NOT NULL DEFAULT '{}'::jsonb,
+  data_sources jsonb NOT NULL DEFAULT '{}'::jsonb,
 
   data_source text NOT NULL DEFAULT 'seeded',
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -130,6 +133,55 @@ type LlmNeighborhoodProfile = {
 };
 ```
 
+`external_metrics` JSON shape for experimental public dataset enrichment:
+
+```ts
+type ExternalMetrics = {
+  zillowZoriCityRentUsd?: number;
+  zillowZoriRegionName?: string;
+  zillowZoriRegionType?: string;
+  zillowZoriAsOf?: string;
+  epaWalkabilityIndex?: number;
+  epaIntersectionDensity?: number;
+  epaTransitProximityMeters?: number;
+  epaEmploymentMix?: number;
+  epaEmploymentHousingMix?: number;
+  epaBlockGroupGeoid?: string;
+  epaWalkabilityMatchedAt?: string;
+  streetEasy?: {
+    url: string;
+    borough: string;
+    medianSaleLabel?: string;
+    medianSaleUsd?: number;
+    medianBaseRentUsd?: number;
+    mood?: string;
+    heart?: string;
+    bestPerk?: string;
+    biggestDownside?: string;
+    foodDrinkNote?: string;
+    similarNeighborhoods?: string[];
+    sourceMode: "scraped" | "snapshot";
+    fetchedAt: string;
+  };
+};
+```
+
+`streetEasy` stores NYC launch rent and neighborhood context that has already been copied into the database. It is read at runtime from `neighborhood_profiles.external_metrics`.
+
+`data_sources` records where each experimental metric came from:
+
+```ts
+type DataSources = Record<
+  string,
+  {
+    name: string;
+    url: string;
+    fetchedAt: string;
+    notes?: string;
+  }
+>;
+```
+
 ## user_profiles
 
 Stores the user/session preference profile. Auth is still deferred, so `auth_id` may remain `demo-user` for now.
@@ -159,9 +211,43 @@ CREATE TABLE user_profiles (
 
   matched_neighborhoods jsonb NOT NULL DEFAULT '[]'::jsonb,
   source_place_context jsonb NOT NULL DEFAULT '{}'::jsonb,
+  chat_messages jsonb NOT NULL DEFAULT '[]'::jsonb,
+  last_selected_neighborhood_id text,
 
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
+);
+```
+
+`chat_messages` stores the saved Polaris conversation for the demo profile:
+
+```ts
+type PersistedChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
+};
+```
+
+## api_response_cache
+
+Stores exact API responses keyed by a stable SHA-256 hash of provider, operation, model, and normalized request payload.
+
+This is used to avoid repeated paid calls for identical Llama prompts and TomTom POI searches.
+
+```sql
+CREATE TABLE api_response_cache (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  provider text NOT NULL,
+  operation text NOT NULL,
+  model text NOT NULL,
+  cache_key text NOT NULL UNIQUE,
+  request_payload jsonb NOT NULL,
+  response_payload jsonb NOT NULL,
+  hit_count integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  last_accessed_at timestamptz NOT NULL DEFAULT now()
 );
 ```
 
@@ -183,6 +269,11 @@ type SourcePlaceContext = {
   sourceCity?: string;
   likes?: string;
   dislikes?: string;
+  mobilityPreference?: string;
+  nearbyPriorities?: string[];
+  dailyLifeNotes?: string;
+  lifestylePicks?: string[];
+  tradeoffs?: string[];
   preferences?: Record<string, number>;
   generatedBy?: string;
   generatedAt?: string;
@@ -191,11 +282,13 @@ type SourcePlaceContext = {
 
 ## Enrichment Flow
 
-`npm run db:setup:minimal` creates the three-table model in the active Neon database.
+`npm run db:setup` creates the three-table model in the active Neon database.
 
 `npm run db:enrich` populates the three-table model.
 
-`npm run db:fill:groq` uses Groq to fill `llm_profile`, refreshed tags, concise summaries, and neighborhood-to-neighborhood commute snippets for the already-seeded rows.
+`npm run db:copy:aurora:data-api` copies the current source database into Aurora through the RDS Data API.
+
+`npm run db:test:data-api` checks Aurora table counts for demo proof.
 
 Inputs:
 
@@ -208,4 +301,4 @@ Output:
 - Upserted `cities`.
 - Upserted `neighborhood_profiles`.
 - API-enriched `places` stored in `neighborhood_profiles.places`.
-- Groq-enriched profile context stored in `neighborhood_profiles.llm_profile`.
+- Copied Aurora shadow data when the Data API sync script is run.

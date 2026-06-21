@@ -22,6 +22,13 @@ interface SessionData {
     sourceCity?: string;
     likes: string;
     dislikes?: string;
+    mobilityPreference?: string;
+    weatherPreference?: string;
+    nearbyPriorities?: string[];
+    dailyLifeNotes?: string;
+    intent?: string;
+    lifestylePicks?: string[];
+    tradeoffs?: string[];
   };
   preferences: Record<string, number>;
   budgetMin: number;
@@ -86,6 +93,33 @@ const CATEGORY_STYLES: Record<NearbyPlace["category"], string> = {
   practical: "bg-teal-50 text-teal-600",
 };
 
+const FOLLOW_UP_CHIPS = [
+  "What's the catch?",
+  "Compare with my #2",
+  "Plan my first weekend",
+  "Is this good without a car?",
+];
+
+const PRACTICAL_PLACE_KEYWORDS = [
+  "grocery",
+  "market",
+  "supermarket",
+  "pharmacy",
+  "station",
+  "transit",
+  "subway",
+  "path",
+  "train",
+  "bus",
+  "park",
+  "gym",
+  "fitness",
+  "clinic",
+  "library",
+  "laundry",
+  "errand",
+];
+
 function formatUsd(value?: number) {
   if (typeof value !== "number" || !Number.isFinite(value)) return "Not loaded";
   return `$${Math.round(value).toLocaleString()}`;
@@ -94,16 +128,6 @@ function formatUsd(value?: number) {
 function formatNumber(value?: number, digits = 1) {
   if (typeof value !== "number" || !Number.isFinite(value)) return "Not loaded";
   return value.toFixed(digits);
-}
-
-function formatDate(value?: string) {
-  if (!value) return "Unknown date";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    year: "numeric",
-  });
 }
 
 function StatCard({
@@ -164,6 +188,34 @@ function MeterRow({
   );
 }
 
+function sentenceCase(text: string) {
+  if (!text) return text;
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function getPracticalPlaceScore(place: NearbyPlace) {
+  const searchable = [
+    place.name,
+    place.summary,
+    ...place.bestForTags,
+    ...place.vibeTags,
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  let score = 0;
+  if (place.category === "practical") score += 8;
+  if (place.category === "wellness") score += 4;
+  if (place.category === "food") score += 1;
+  if (place.category === "nightlife") score -= 2;
+
+  for (const keyword of PRACTICAL_PLACE_KEYWORDS) {
+    if (searchable.includes(keyword)) score += 2;
+  }
+
+  return score;
+}
+
 function ResultsPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -185,6 +237,7 @@ function ResultsPageContent() {
   // Lifestyle weights panel is de-emphasized and collapsed by default
   const [showWeights, setShowWeights] = useState(false);
   const [showStatsPanel, setShowStatsPanel] = useState(false);
+  const [showChatPanel, setShowChatPanel] = useState(false);
   
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -226,7 +279,7 @@ function ResultsPageContent() {
 
   // 1. Load data on mount
   useEffect(() => {
-    const rawSession = localStorage.getItem("city_agent_onboarding");
+    const rawSession = localStorage.getItem("polaris_onboarding");
     if (!rawSession) {
       router.push("/");
       return;
@@ -248,6 +301,7 @@ function ResultsPageContent() {
               budgetMin: parsed.budgetMin,
               budgetMax: parsed.budgetMax,
               citySlug: parsed.citySlug,
+              source: parsed.source,
             }),
           });
           const payload = await res.json();
@@ -334,29 +388,32 @@ function ResultsPageContent() {
     // Recalculate client-side scores
     startTransition(() => {
       const recalculated = rawNeighborhoods.map((row) => {
-        // Compute cosine similarity
-        let dotProduct = 0;
-        let normA = 0;
-        let normB = 0;
+        // Compute weighted feature closeness. This is stricter than cosine
+        // similarity, which tends to overrate positive lifestyle vectors.
+        let weightedTotal = 0;
+        let weightSum = 0;
 
         Object.keys(FEATURE_KEY_MAP).forEach((prefKey) => {
           const typedPrefKey = prefKey as keyof typeof FEATURE_KEY_MAP;
           const featureKey = FEATURE_KEY_MAP[typedPrefKey];
           const a = updatedPrefs[prefKey] ?? 0.5;
           const dbVal = row.features[featureKey] ?? 0.5;
+          const importance = 0.65 + Math.abs(a - 0.5) * 1.4;
+          const closeness = Math.max(0, 1 - Math.abs(a - dbVal));
 
-          dotProduct += a * dbVal;
-          normA += a * a;
-          normB += dbVal * dbVal;
+          weightedTotal += closeness * importance;
+          weightSum += importance;
         });
 
-        const similarity = normA === 0 || normB === 0 ? 0.5 : dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+        const similarity = weightSum === 0 ? 0.5 : weightedTotal / weightSum;
+        const calibratedSimilarity = Math.max(0, Math.min(1, (similarity - 0.72) / 0.28));
         
         // Budget fit is already computed on the backend row representation
         const budgetFit = row.scoreBreakdown.budgetFit / 100;
 
-        const rawScore = similarity * 0.7 + budgetFit * 0.3;
-        const score = Math.round(rawScore * 100);
+        const rawScore = calibratedSimilarity * 0.7 + budgetFit * 0.3;
+        const llmAdjustment = row.scoreBreakdown.llmAdjustment ?? 0;
+        const score = Math.max(0, Math.min(100, Math.round(rawScore * 100) + llmAdjustment));
 
         // Friendly labels mapping for top reasons
         const contributions = [
@@ -378,8 +435,9 @@ function ResultsPageContent() {
           score,
           reasons,
           scoreBreakdown: {
-            similarity: Math.round(similarity * 100),
+            similarity: Math.round(calibratedSimilarity * 100),
             budgetFit: row.scoreBreakdown.budgetFit,
+            llmAdjustment,
           },
         };
       });
@@ -391,11 +449,10 @@ function ResultsPageContent() {
   };
 
   // 4. Handle Chat Send
-  const handleChatSend = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!chatInput.trim() || chatLoading) return;
+  const sendChatMessage = async (message: string) => {
+    const userMessage = message.trim();
+    if (!userMessage || chatLoading) return;
 
-    const userMessage = chatInput;
     const nextMessages: ChatMessage[] = [
       ...messages,
       {
@@ -463,12 +520,19 @@ function ResultsPageContent() {
     }
   };
 
+  const handleChatSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await sendChatMessage(chatInput);
+  };
+
   const selectedNeighborhood = matches.find((m) => m.neighborhoodId === selectedId);
   const selectedExternalMetrics = selectedNeighborhood?.externalMetrics ?? {};
+  const streetEasy = selectedExternalMetrics.streetEasy;
   const hasNycExternalData =
     citySlug === "nyc" &&
     (typeof selectedExternalMetrics.zillowZoriCityRentUsd === "number" ||
-      typeof selectedExternalMetrics.epaWalkabilityIndex === "number");
+      typeof selectedExternalMetrics.epaWalkabilityIndex === "number" ||
+      typeof streetEasy?.medianBaseRentUsd === "number");
   const walkabilityOutOfTwenty =
     typeof selectedExternalMetrics.epaWalkabilityIndex === "number"
       ? selectedExternalMetrics.epaWalkabilityIndex
@@ -477,6 +541,19 @@ function ResultsPageContent() {
     typeof walkabilityOutOfTwenty === "number"
       ? Math.max(0, Math.min(1, walkabilityOutOfTwenty / 20))
       : selectedNeighborhood?.features.walkability ?? 0.5;
+  const monthlyBudgetMidpoint =
+    session && Number.isFinite(session.budgetMin) && Number.isFinite(session.budgetMax)
+      ? Math.round((session.budgetMin + session.budgetMax) / 2)
+      : undefined;
+  const selectedRentMidpoint = selectedNeighborhood
+    ? Math.round((selectedNeighborhood.rentMin + selectedNeighborhood.rentMax) / 2)
+    : undefined;
+  const selectedMarketRent =
+    streetEasy?.medianBaseRentUsd ?? selectedRentMidpoint;
+  const rentComparedToBudget =
+    monthlyBudgetMidpoint && selectedMarketRent
+      ? selectedMarketRent - monthlyBudgetMidpoint
+      : undefined;
   const placeCategoryCounts = nearbyPlaces.reduce(
     (counts, place) => {
       counts[place.category] = (counts[place.category] ?? 0) + 1;
@@ -484,14 +561,25 @@ function ResultsPageContent() {
     },
     {} as Partial<Record<NearbyPlace["category"], number>>,
   );
+  const practicalNearbyPlaces = [...nearbyPlaces].sort((a, b) => {
+    const scoreDelta = getPracticalPlaceScore(b) - getPracticalPlaceScore(a);
+    if (scoreDelta !== 0) return scoreDelta;
+    return a.name.localeCompare(b.name);
+  });
   const topNearbyTags = Array.from(
     new Set(
-      nearbyPlaces.flatMap((place) => [
+      practicalNearbyPlaces.flatMap((place) => [
         ...place.bestForTags.slice(0, 2),
         ...place.vibeTags.slice(0, 2),
       ]),
     ),
   ).slice(0, 6);
+  const quickMatchReason = selectedNeighborhood
+    ? `${selectedNeighborhood.neighborhoodName} fits because it matches your ${selectedNeighborhood.reasons
+        .slice(0, 2)
+        .map((reason) => reason.toLowerCase())
+        .join(" and ")}.`
+    : "";
   const mapCenter = useMemo<[number, number]>(
     () =>
       selectedNeighborhood
@@ -701,35 +789,35 @@ function ResultsPageContent() {
                   {hasNycExternalData ? "NY" : "%"}
                 </span>
                 <span>
-                  Compare stats
+                  Match evidence
                   <span className="block text-[10px] font-medium text-slate-500">
                     {hasNycExternalData
                       ? "NYC public data loaded"
-                      : "Lifestyle match breakdown"}
+                      : "Budget and lifestyle fit"}
                   </span>
                 </span>
               </button>
             )}
           </section>
 
-          {/* Details & Chat Overlay Sidebar */}
+          {/* Details Sidebar */}
           <section className="w-full md:w-96 bg-white overflow-y-auto flex flex-col h-1/2 md:h-full flex-shrink-0 min-h-0 shadow-[-4px_0_20px_rgba(60,52,42,0.05)]">
             {/* Selected Neighborhood Details */}
             {selectedNeighborhood && (
-              <div className="p-6 bg-blue-50/50">
+              <div className="p-5 bg-blue-50/50">
                 <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-blue-700 uppercase tracking-wider mb-2">
                   <span className="h-1.5 w-1.5 rounded-full bg-blue-600 animate-pulse" />
                   Now exploring
                 </span>
-                <div className="flex justify-between items-start mb-3 gap-3">
-                  <h2 className="text-2xl font-bold text-slate-900 leading-tight">{selectedNeighborhood.neighborhoodName}</h2>
+                <div className="flex justify-between items-start gap-3">
+                  <h2 className="text-xl font-bold text-slate-900 leading-tight">{selectedNeighborhood.neighborhoodName}</h2>
                   <span className="flex-shrink-0 text-xs bg-blue-600 text-white px-3 py-1 rounded-full font-bold shadow-brand">
                     {selectedNeighborhood.score}% Fit
                   </span>
                 </div>
                 
                 {/* Rent Range Indicator */}
-                <div className="inline-flex items-center gap-2 text-sm text-slate-500 mb-4 bg-white rounded-2xl px-3.5 py-2 shadow-soft-sm">
+                <div className="mt-3 inline-flex items-center gap-2 text-sm text-slate-500 bg-white rounded-2xl px-3.5 py-2 shadow-soft-sm">
                   <span className="text-[11px] uppercase tracking-wide text-slate-400 font-semibold">Rent</span>
                   <span className="text-slate-900 font-bold">
                     ${selectedNeighborhood.rentMin.toLocaleString()}{selectedNeighborhood.rentMin === selectedNeighborhood.rentMax ? "" : ` – $${selectedNeighborhood.rentMax.toLocaleString()}`}
@@ -737,45 +825,58 @@ function ResultsPageContent() {
                   <span className="text-slate-400 text-xs">/mo</span>
                 </div>
 
-                <p className="text-sm text-slate-600 leading-relaxed">
-                  {selectedNeighborhood.summary}
+                <p className="mt-3 rounded-2xl bg-white px-4 py-3 text-sm font-medium leading-relaxed text-slate-700 shadow-soft-sm">
+                  {quickMatchReason}
                 </p>
 
-                <div className="mt-4 flex flex-wrap gap-1.5">
-                  {[...selectedNeighborhood.vibeTags, ...selectedNeighborhood.bestForTags]
-                    .slice(0, 7)
-                    .map((tag: string) => (
-                      <span
-                        key={tag}
-                        className="text-[10px] bg-blue-100 px-2.5 py-1 rounded-full text-blue-700 font-medium"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                </div>
-
-                {/* Reasons List */}
-                <div className="space-y-2 mt-4">
-                  <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Top match drivers</h4>
-                  <ul className="space-y-1.5">
-                    {selectedNeighborhood.reasons.map((reason: string) => (
-                      <li key={reason} className="text-xs text-slate-600 flex items-center gap-2">
-                        <span className="w-1 h-1 bg-blue-600 rounded-full" />
-                        {reason}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                {streetEasy && (
+                  <div className="mt-3 grid gap-2">
+                    {typeof streetEasy.medianBaseRentUsd === "number" && (
+                      <div className="rounded-2xl bg-white px-4 py-3 shadow-soft-sm">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                          StreetEasy median base rent
+                        </div>
+                        <div className="mt-0.5 text-lg font-black text-slate-950">
+                          ${streetEasy.medianBaseRentUsd.toLocaleString()}
+                          <span className="ml-1 text-xs font-semibold text-slate-400">/mo</span>
+                        </div>
+                      </div>
+                    )}
+                    {(streetEasy.bestPerk || streetEasy.biggestDownside) && (
+                      <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-1">
+                        {streetEasy.bestPerk && (
+                          <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-xs leading-relaxed text-emerald-800">
+                            <span className="block text-[10px] font-black uppercase tracking-wider text-emerald-600">
+                              Best perk
+                            </span>
+                            {streetEasy.bestPerk}
+                          </div>
+                        )}
+                        {streetEasy.biggestDownside && (
+                          <div className="rounded-2xl bg-amber-50 px-4 py-3 text-xs leading-relaxed text-amber-800">
+                            <span className="block text-[10px] font-black uppercase tracking-wider text-amber-600">
+                              Watch-out
+                            </span>
+                            {streetEasy.biggestDownside}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
             {/* Nearby Fit Subsection */}
-            <div className="p-6 flex-1 min-h-[200px] flex flex-col">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Nearby Fit</h3>
+            <div className="flex-1 min-h-0 p-5 flex flex-col">
+              <div className="mb-3 flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-black text-slate-950">Nearby fit</h3>
+                  <p className="text-xs text-slate-500">Errands, transit, parks, and useful anchors.</p>
+                </div>
                 {nearbyPlaces.length > 0 && (
-                  <span className="text-[10px] text-slate-500">
-                    {nearbyPlaces.length} saved places
+                  <span className="rounded-full bg-blue-100 px-2.5 py-1 text-[10px] font-bold text-blue-700">
+                    {nearbyPlaces.length} places
                   </span>
                 )}
               </div>
@@ -789,18 +890,18 @@ function ResultsPageContent() {
                   No nearby-fit places are saved for this neighborhood yet.
                 </div>
               ) : (
-                <div className="space-y-4 max-h-[22rem] overflow-y-auto no-scrollbar pr-1">
-                  <div className="grid grid-cols-2 gap-2">
+                <div className="flex-1 min-h-0 space-y-3 overflow-y-auto no-scrollbar pr-1">
+                  <div className="grid grid-cols-4 gap-2">
                     {(Object.keys(CATEGORY_LABELS) as NearbyPlace["category"][]).map((category) => (
                       <div
                         key={category}
-                        className={`rounded-2xl px-3.5 py-2.5 ${CATEGORY_STYLES[category]}`}
+                        className={`rounded-2xl px-2.5 py-2 text-center ${CATEGORY_STYLES[category]}`}
                       >
-                        <div className="text-[10px] font-bold">
-                          {CATEGORY_LABELS[category]}
-                        </div>
-                        <div className="text-xl font-bold leading-tight">
+                        <div className="text-lg font-black leading-tight">
                           {placeCategoryCounts[category] ?? 0}
+                        </div>
+                        <div className="truncate text-[9px] font-bold">
+                          {category}
                         </div>
                       </div>
                     ))}
@@ -824,11 +925,11 @@ function ResultsPageContent() {
                     </div>
                   )}
 
-                  <div className="space-y-2">
-                    {nearbyPlaces.slice(0, 12).map((place) => (
+                  <div className="grid gap-2">
+                    {practicalNearbyPlaces.slice(0, 10).map((place) => (
                       <div
                         key={place.id}
-                        className={`bg-slate-50 hover:bg-white hover:shadow-soft border-l-4 p-4 rounded-2xl transition-all ${
+                        className={`bg-slate-50 hover:bg-white hover:shadow-soft border-l-4 p-3 rounded-2xl transition-all ${
                           place.category === "food"
                             ? "border-l-amber-400"
                             : place.category === "nightlife"
@@ -838,13 +939,13 @@ function ResultsPageContent() {
                                 : "border-l-teal-500"
                         }`}
                       >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <h4 className="text-xs font-bold text-slate-900">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <h4 className="truncate text-xs font-bold text-slate-900">
                               {place.name}
                             </h4>
-                            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
-                              {place.summary}
+                            <p className="mt-0.5 line-clamp-1 text-[11px] text-slate-500">
+                              {sentenceCase(place.bestForTags[0] || place.vibeTags[0] || place.category)}
                             </p>
                           </div>
                           <span className={`text-[9px] px-2 py-0.5 rounded-full whitespace-nowrap font-semibold ${CATEGORY_STYLES[place.category]}`}>
@@ -858,22 +959,51 @@ function ResultsPageContent() {
               )}
             </div>
 
-            {/* Chatbox Panel */}
-            <div className="p-6 bg-slate-100 flex flex-col h-80 justify-between">
-              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Ask City Agent</h3>
-              
-              <div className="flex-1 overflow-y-auto text-xs space-y-3 mb-4 pr-1 scrollbar-thin scrollbar-thumb-slate-200">
+          </section>
+
+          <button
+            type="button"
+            onClick={() => setShowChatPanel((value) => !value)}
+            aria-label="Ask Polaris"
+            aria-expanded={showChatPanel}
+            className="absolute bottom-6 right-6 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-blue-600 text-sm font-black text-white shadow-[0_16px_40px_rgba(37,99,235,0.35)] transition-all hover:-translate-y-0.5 hover:bg-blue-500 active:scale-95"
+          >
+            AI
+          </button>
+
+          {showChatPanel && (
+            <div className="absolute bottom-24 right-6 z-30 flex h-[28rem] w-[min(24rem,calc(100vw-3rem))] flex-col rounded-3xl border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.25)]">
+              <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+                <div>
+                  <h3 className="text-sm font-black text-slate-950">Ask Polaris</h3>
+                  <p className="text-[11px] text-slate-500">
+                    {selectedNeighborhood
+                      ? `Questions about ${selectedNeighborhood.neighborhoodName}`
+                      : "Questions about your matches"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowChatPanel(false)}
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-sm font-bold text-slate-500 hover:bg-slate-200"
+                  aria-label="Close Polaris"
+                >
+                  x
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-5 py-4 text-xs space-y-3 scrollbar-thin scrollbar-thumb-slate-200">
                 {messages.map((msg, i) => (
                   <div key={i} className={`p-3 rounded-2xl max-w-[85%] leading-relaxed ${
                     msg.role === "assistant"
-                      ? "bg-white text-slate-700 shadow-soft-sm bubble-ai"
+                      ? "bg-slate-100 text-slate-700 bubble-ai"
                       : "bg-blue-600 text-white self-end ml-auto bubble-user"
                   }`}>
                     {msg.content}
                   </div>
                 ))}
                 {chatLoading && (
-                  <div className="p-3 bg-white text-slate-500 rounded-2xl max-w-[85%] shadow-soft-sm bubble-ai">
+                  <div className="p-3 bg-slate-100 text-slate-500 rounded-2xl max-w-[85%] bubble-ai">
                     <span className="inline-flex gap-1">
                       <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" />
                       <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.2s]" />
@@ -883,24 +1013,40 @@ function ResultsPageContent() {
                 )}
               </div>
 
-              <form onSubmit={handleChatSend} className="flex gap-2">
+              <div className="border-t border-slate-100 px-4 pt-3">
+                <div className="flex flex-wrap gap-2">
+                  {FOLLOW_UP_CHIPS.map((question) => (
+                    <button
+                      key={question}
+                      type="button"
+                      disabled={chatLoading}
+                      onClick={() => sendChatMessage(question)}
+                      className="rounded-full bg-slate-100 px-3 py-1.5 text-[11px] font-semibold text-slate-600 transition-all hover:bg-blue-50 hover:text-blue-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {question}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <form onSubmit={handleChatSend} className="flex gap-2 p-4">
                 <input
                   type="text"
                   placeholder={`Ask about ${selectedNeighborhood?.neighborhoodName || "neighborhoods"}...`}
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
-                  className="flex-1 bg-white border-2 border-transparent focus:border-blue-400 rounded-full px-4 py-2 text-xs text-slate-900 outline-none transition-all shadow-soft-sm"
+                  className="min-w-0 flex-1 rounded-full border-2 border-transparent bg-slate-100 px-4 py-2 text-xs text-slate-900 outline-none transition-all focus:border-blue-400 focus:bg-white"
                 />
                 <button
                   type="submit"
                   disabled={chatLoading}
-                  className="bg-blue-600 hover:bg-blue-500 hover:scale-105 active:scale-95 text-white text-xs font-bold px-5 py-2 rounded-full transition-all shadow-brand"
+                  className="rounded-full bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-brand transition-all hover:bg-blue-500 active:scale-95 disabled:opacity-50"
                 >
                   Send
                 </button>
               </form>
             </div>
-          </section>
+          )}
 
           {selectedNeighborhood && (
             <div
@@ -934,29 +1080,49 @@ function ResultsPageContent() {
                 </button>
 
                 <div className="max-h-[58vh] overflow-y-auto border-t border-slate-100 px-5 pb-6 pt-5 md:px-6">
-                  <div className="grid gap-4 md:grid-cols-3">
+                  <div className="grid gap-4 md:grid-cols-4">
                     <div className="rounded-3xl bg-slate-950 p-5 text-white">
                       <div className="text-[10px] font-bold uppercase tracking-wider text-blue-200">
-                        Your old-place signal
+                        Your budget
                       </div>
                       <h4 className="mt-2 text-xl font-black">
-                        {session?.source.sourceNeighborhood || "Your source place"}
+                        {session
+                          ? `$${session.budgetMin.toLocaleString()} - $${session.budgetMax.toLocaleString()}`
+                          : "Not set"}
                       </h4>
                       <p className="mt-3 text-sm leading-relaxed text-slate-300">
-                        {session?.source.likes ||
-                          "We use what you liked before as the baseline for your New York matches."}
+                        {selectedNeighborhood
+                          ? `${selectedNeighborhood.neighborhoodName} is stored at $${selectedNeighborhood.rentMin.toLocaleString()} - $${selectedNeighborhood.rentMax.toLocaleString()} per month${
+                              streetEasy?.medianBaseRentUsd
+                                ? `, with StreetEasy showing $${streetEasy.medianBaseRentUsd.toLocaleString()} as an external rent signal`
+                                : ""
+                            }.`
+                          : "Pick a neighborhood to see rent fit."}
                       </p>
                     </div>
 
                     <StatCard
-                      label="NYC rent baseline"
-                      value={formatUsd(selectedExternalMetrics.zillowZoriCityRentUsd)}
+                      label="Neighborhood rent"
+                      value={formatUsd(selectedMarketRent)}
                       caption={
-                        selectedExternalMetrics.zillowZoriAsOf
-                          ? `Zillow ZORI city-level observed rent, ${formatDate(selectedExternalMetrics.zillowZoriAsOf)}. This is not neighborhood-specific yet.`
-                          : "Experimental public rent baseline not loaded for this match."
+                        streetEasy
+                          ? `StreetEasy median base rent for ${selectedNeighborhood.neighborhoodName}. Base rent excludes extra fees.`
+                          : "Estimated neighborhood rent range midpoint from our stored profile."
                       }
                       tone="amber"
+                    />
+
+                    <StatCard
+                      label="Rent fit"
+                      value={
+                        typeof rentComparedToBudget === "number"
+                          ? rentComparedToBudget <= 0
+                            ? `$${Math.abs(rentComparedToBudget).toLocaleString()} under`
+                            : `$${rentComparedToBudget.toLocaleString()} over`
+                          : "Not loaded"
+                      }
+                      caption="Compares the best available neighborhood rent signal against your budget midpoint."
+                      tone="blue"
                     />
 
                     <StatCard
@@ -969,7 +1135,7 @@ function ResultsPageContent() {
                       caption={
                         selectedExternalMetrics.epaBlockGroupGeoid
                           ? `Matched by neighborhood center to Census block group ${selectedExternalMetrics.epaBlockGroupGeoid}.`
-                          : "Using our internal walkability score because EPA data is not loaded here."
+                          : "Internal walkability signal from the neighborhood profile."
                       }
                       tone="teal"
                     />
@@ -1002,9 +1168,17 @@ function ResultsPageContent() {
                         note="How well your budget overlaps with our stored rent range."
                       />
                       <MeterRow
-                        label="EPA walkability signal"
+                        label={
+                          typeof walkabilityOutOfTwenty === "number"
+                            ? "EPA walkability signal"
+                            : "Walkability signal"
+                        }
                         value={walkabilityNormalized}
-                        note="NYC-only public dataset signal."
+                        note={
+                          typeof walkabilityOutOfTwenty === "number"
+                            ? "NYC public dataset signal."
+                            : "Profile score used by matching today."
+                        }
                       />
                       <MeterRow
                         label="Internal transit score"
@@ -1012,43 +1186,34 @@ function ResultsPageContent() {
                         note="Profile score used by matching today."
                       />
                     </div>
+                    {selectedNeighborhood.llmCalibration && (
+                      <div className="mt-4 rounded-2xl bg-slate-50 px-4 py-3 text-xs leading-relaxed text-slate-600">
+                        <span className="font-bold text-slate-900">
+                          Llama calibration{" "}
+                          {selectedNeighborhood.llmCalibration.scoreDelta > 0 ? "+" : ""}
+                          {selectedNeighborhood.llmCalibration.scoreDelta}:
+                        </span>{" "}
+                        {selectedNeighborhood.llmCalibration.reason}
+                      </div>
+                    )}
                   </div>
 
-                  <div className="mt-5 grid gap-3 md:grid-cols-4">
-                    {(Object.keys(CATEGORY_LABELS) as NearbyPlace["category"][]).map((category) => (
-                      <div
-                        key={category}
-                        className={`rounded-2xl px-4 py-3 ${CATEGORY_STYLES[category]}`}
-                      >
-                        <div className="text-[10px] font-black uppercase tracking-wider">
-                          {CATEGORY_LABELS[category]}
-                        </div>
-                        <div className="mt-1 text-2xl font-black leading-tight">
-                          {placeCategoryCounts[category] ?? 0}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="mt-5 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                    {nearbyPlaces.slice(0, 12).map((place) => (
-                      <div
-                        key={place.id}
-                        className="rounded-2xl border border-slate-200 bg-slate-50 p-3"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <h4 className="truncate text-xs font-black text-slate-900">
-                            {place.name}
-                          </h4>
-                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold ${CATEGORY_STYLES[place.category]}`}>
-                            {place.category}
-                          </span>
-                        </div>
-                        <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-slate-500">
-                          {place.summary}
-                        </p>
-                      </div>
-                    ))}
+                  <div className="mt-5 rounded-3xl border border-slate-200 bg-slate-50 p-5">
+                    <h4 className="text-sm font-black text-slate-950">
+                      What this means
+                    </h4>
+                    <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                      {selectedNeighborhood.neighborhoodName} is being recommended because the lifestyle profile lines up with what you described, while the rent signal is checked against your budget.
+                      {streetEasy
+                        ? " StreetEasy adds a practical layer with market rent, strongest perk, and biggest watch-out."
+                        : " The practical layer comes from the stored neighborhood profile, nearby places, and matching scores."}
+                    </p>
+                    {streetEasy?.mood && (
+                      <p className="mt-3 rounded-2xl bg-white px-4 py-3 text-sm leading-relaxed text-slate-600">
+                        <span className="font-bold text-slate-900">Local mood: </span>
+                        {streetEasy.mood}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>

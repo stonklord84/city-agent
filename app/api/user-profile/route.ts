@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { eq, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { cities, userProfiles } from "@/lib/db/schema-minimal";
+import { cities, userProfiles } from "@/lib/db/schema";
 
 const FEATURE_KEYS = [
   "walkability",
@@ -29,6 +29,13 @@ type UserProfilePayload = {
     sourceCity?: string;
     likes?: string;
     dislikes?: string;
+    mobilityPreference?: string;
+    weatherPreference?: string;
+    nearbyPriorities?: string[];
+    dailyLifeNotes?: string;
+    intent?: string;
+    lifestylePicks?: string[];
+    tradeoffs?: string[];
   };
   preferences?: Partial<Record<FeatureKey, number>>;
   matchedNeighborhoods?: Array<{
@@ -131,10 +138,21 @@ export async function POST(request: Request) {
           sourceCity: source.sourceCity ?? "",
           likes: source.likes ?? "",
           dislikes: source.dislikes ?? "",
+          mobilityPreference: source.mobilityPreference ?? "",
+          weatherPreference: source.weatherPreference ?? "",
+          nearbyPriorities: Array.isArray(source.nearbyPriorities)
+            ? source.nearbyPriorities
+            : [],
+          dailyLifeNotes: source.dailyLifeNotes ?? "",
+          intent: source.intent ?? "",
+          lifestylePicks: Array.isArray(source.lifestylePicks)
+            ? source.lifestylePicks
+            : [],
+          tradeoffs: Array.isArray(source.tradeoffs) ? source.tradeoffs : [],
           preferences: Object.fromEntries(
             FEATURE_KEYS.map((key) => [key, readPreference(preferences, key)]),
           ),
-          generatedBy: "groq",
+          generatedBy: "llama",
           generatedAt,
         },
       })

@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, or } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { cities, neighborhoodProfiles } from "@/lib/db/schema-minimal";
+import { cities, neighborhoodProfiles } from "@/lib/db/schema";
 
 export type CityContextRequest = {
   citySlug: string;
@@ -33,6 +33,16 @@ export type CityContextNeighborhood = {
     youngProfessionals: number;
     affordability: number;
     diversity: number;
+  };
+  externalMetrics: {
+    streetEasy?: {
+      medianBaseRentUsd?: number;
+      mood?: string;
+      heart?: string;
+      bestPerk?: string;
+      biggestDownside?: string;
+      foodDrinkNote?: string;
+    };
   };
   places: Array<{
     id: string;
@@ -129,6 +139,20 @@ export async function getCityContext({
         affordability: profile.affordability,
         diversity: profile.diversity,
       },
+      externalMetrics: {
+        streetEasy: profile.externalMetrics.streetEasy
+          ? {
+              medianBaseRentUsd:
+                profile.externalMetrics.streetEasy.medianBaseRentUsd,
+              mood: profile.externalMetrics.streetEasy.mood,
+              heart: profile.externalMetrics.streetEasy.heart,
+              bestPerk: profile.externalMetrics.streetEasy.bestPerk,
+              biggestDownside:
+                profile.externalMetrics.streetEasy.biggestDownside,
+              foodDrinkNote: profile.externalMetrics.streetEasy.foodDrinkNote,
+            }
+          : undefined,
+      },
       places: profile.places.slice(0, placeLimitPerNeighborhood).map((place, index) => ({
         id: `${profile.id}-place-${index}`,
         name: place.name,
@@ -160,6 +184,7 @@ export function cityContextToPrompt(context: CityContext): string {
           currency: context.city.currency,
         },
         features: neighborhood.features,
+        streetEasy: neighborhood.externalMetrics.streetEasy,
         places: neighborhood.places.map((place) => ({
           name: place.name,
           category: place.category,

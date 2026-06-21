@@ -47,7 +47,7 @@ drizzle/
 
 context/
 PLAN.md
-# location-research/Mumbai_Neighborhood_Research.md
+location-research
 # location-research/Toronto Research.md
 # location-research/NYC_Neighborhood_Research.md
 .env*
@@ -56,8 +56,3 @@ PLAN.md
 db-backups/
 global-bundle.pem
 *.dump
-
-# one-off Aurora migration helpers
-lib/db/copy-neon-to-aurora.ts
-lib/db/export-neon-to-sql.ts
-lib/db/test-aurora-data-api.ts

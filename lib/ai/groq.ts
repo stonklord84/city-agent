@@ -16,6 +16,8 @@ type GroqChatCompletionResponse = {
   }>;
 };
 
+class NonRetryableGroqError extends Error {}
+
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 
 export const GROQ_MODEL =
@@ -82,6 +84,11 @@ export async function createGroqChatCompletion(messages: GroqMessage[]) {
 
       if (!response.ok) {
         const details = await response.text();
+        if (response.status === 400 || response.status === 413) {
+          throw new NonRetryableGroqError(
+            `Groq request failed: ${response.status} ${details}`,
+          );
+        }
         throw new Error(`Groq request failed: ${response.status} ${details}`);
       }
 
@@ -89,7 +96,7 @@ export async function createGroqChatCompletion(messages: GroqMessage[]) {
       const content = payload.choices?.[0]?.message?.content;
 
       if (!content) {
-        throw new Error("Groq returned an empty response.");
+        throw new Error("Llama returned an empty response.");
       }
 
       try {
@@ -103,6 +110,9 @@ export async function createGroqChatCompletion(messages: GroqMessage[]) {
 
       return content;
     } catch (err) {
+      if (err instanceof NonRetryableGroqError) {
+        throw err;
+      }
       if (attempts >= maxAttempts) {
         throw err;
       }

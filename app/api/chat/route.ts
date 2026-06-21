@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { cityContextToPrompt, getCityContext } from "@/lib/ai/city-context";
+import { getCityContext } from "@/lib/ai/city-context";
 import { createGroqChatCompletion } from "@/lib/ai/groq";
 import type { PreferenceVector } from "@/lib/ai/extract-preferences";
 import type { MatchResult } from "@/lib/matching/types";
@@ -24,6 +24,10 @@ type ChatRequestBody = {
     sourceCity?: string;
     likes?: string;
     dislikes?: string;
+    mobilityPreference?: string;
+    weatherPreference?: string;
+    nearbyPriorities?: string[];
+    dailyLifeNotes?: string;
   };
 };
 
@@ -60,7 +64,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const topMatches = matches.slice(0, 5);
+    const topMatches = matches.slice(0, 3);
     const neighborhoodIds = selectedNeighborhoodId
       ? [
           selectedNeighborhoodId,
@@ -73,7 +77,7 @@ export async function POST(request: Request) {
     const context = await getCityContext({
       citySlug,
       neighborhoodIds,
-      placeLimitPerNeighborhood: 6,
+      placeLimitPerNeighborhood: 3,
     });
 
     if (!context) {
@@ -87,7 +91,7 @@ export async function POST(request: Request) {
       {
         role: "system",
         content: [
-          "You are City Agent, a warm local relocation guide.",
+          "You are Polaris, a warm local relocation guide.",
           "Answer using only the provided database context, match results, and user preferences.",
           "Do not invent neighborhoods, places, rent ranges, commute times, or listings.",
           "Do not rank neighborhoods yourself. If comparing options, refer to the deterministic match scores provided by the app.",
@@ -99,23 +103,50 @@ export async function POST(request: Request) {
         content: JSON.stringify(
           {
             currentQuestion: message,
-            recentMessages: messages.slice(-6),
-            sourceContext,
+            recentMessages: messages.slice(-3).map((chatMessage) => ({
+              role: chatMessage.role,
+              content: chatMessage.content.slice(0, 240),
+            })),
+            sourceContext: sourceContext
+              ? {
+                  sourceNeighborhood: sourceContext.sourceNeighborhood,
+                  sourceCity: sourceContext.sourceCity,
+                  likes: sourceContext.likes?.slice(0, 300),
+                  mobilityPreference: sourceContext.mobilityPreference,
+                  weatherPreference: sourceContext.weatherPreference,
+                  nearbyPriorities: sourceContext.nearbyPriorities?.slice(0, 6),
+                  dailyLifeNotes: sourceContext.dailyLifeNotes?.slice(0, 260),
+                }
+              : undefined,
             userPreferences: preferences,
             deterministicMatches: topMatches.map((match) => ({
-              neighborhoodId: match.neighborhoodId,
               neighborhoodName: match.neighborhoodName,
               score: match.score,
-              reasons: match.reasons,
+              reasons: match.reasons.slice(0, 2),
               rentMin: match.rentMin,
               rentMax: match.rentMax,
-              scoreBreakdown: match.scoreBreakdown,
             })),
             selectedNeighborhoodId,
-            databaseContext: JSON.parse(cityContextToPrompt(context)),
+            databaseContext: {
+              city: context.city,
+              neighborhoods: context.neighborhoods.map((neighborhood) => ({
+                id: neighborhood.id,
+                name: neighborhood.name,
+                summary: neighborhood.summary.slice(0, 220),
+                rentMin: neighborhood.rentMin,
+                rentMax: neighborhood.rentMax,
+                vibeTags: neighborhood.vibeTags.slice(0, 4),
+                bestForTags: neighborhood.bestForTags.slice(0, 4),
+                features: neighborhood.features,
+                streetEasy: neighborhood.externalMetrics.streetEasy,
+                places: neighborhood.places.slice(0, 3).map((place) => ({
+                  name: place.name,
+                  category: place.category,
+                  summary: place.summary.slice(0, 120),
+                })),
+              })),
+            },
           },
-          null,
-          2,
         ),
       },
     ]);

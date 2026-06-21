@@ -21,7 +21,7 @@ const fraunces = Fraunces({
 // ─── SEO Metadata ─────────────────────────────────────────────────────────────
 
 export const metadata: Metadata = {
-  title: "City Agent — Find the Neighborhood That Fits Your Life",
+  title: "Polaris — Find the Neighborhood That Fits Your Life",
   description:
     "AI-powered neighborhood discovery. Describe your lifestyle and budget — get personalized recommendations across Mumbai, Toronto, and New York City.",
   keywords: [
@@ -32,9 +32,9 @@ export const metadata: Metadata = {
     "NYC neighborhoods",
     "where to live",
   ],
-  authors: [{ name: "City Agent" }],
+  authors: [{ name: "Polaris" }],
   openGraph: {
-    title: "City Agent — AI Neighborhood Discovery",
+    title: "Polaris — AI Neighborhood Discovery",
     description:
       "Find the perfect neighborhood based on your lifestyle, budget, safety needs, and community preferences.",
     type: "website",
@@ -42,7 +42,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "City Agent — Find Your Perfect Neighborhood",
+    title: "Polaris — Find Your Perfect Neighborhood",
     description: "AI-powered neighborhood matching across global cities.",
   },
   robots: { index: true, follow: true },

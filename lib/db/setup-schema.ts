@@ -13,13 +13,13 @@ async function main() {
     throw new Error("DATABASE_URL is required.");
   }
 
-  const schemaPath = join(process.cwd(), "lib/db/create-minimal-schema.sql");
+  const schemaPath = join(process.cwd(), "lib/db/create-schema.sql");
   const schemaSql = await readFile(schemaPath, "utf8");
   const client = postgres(connectionString, { max: 1, prepare: false });
 
   try {
     await client.unsafe(schemaSql);
-    console.log("Minimal Neon schema is ready.");
+    console.log(" Neon schema is ready.");
   } finally {
     await client.end();
   }

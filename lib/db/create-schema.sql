@@ -40,6 +40,8 @@ CREATE TABLE IF NOT EXISTS neighborhood_profiles (
   places jsonb NOT NULL DEFAULT '[]'::jsonb,
   commute_estimates jsonb NOT NULL DEFAULT '[]'::jsonb,
   llm_profile jsonb NOT NULL DEFAULT '{}'::jsonb,
+  external_metrics jsonb NOT NULL DEFAULT '{}'::jsonb,
+  data_sources jsonb NOT NULL DEFAULT '{}'::jsonb,
 
   data_source text NOT NULL DEFAULT 'seeded',
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -73,16 +75,47 @@ CREATE TABLE IF NOT EXISTS user_profiles (
 
   matched_neighborhoods jsonb NOT NULL DEFAULT '[]'::jsonb,
   source_place_context jsonb NOT NULL DEFAULT '{}'::jsonb,
+  chat_messages jsonb NOT NULL DEFAULT '[]'::jsonb,
+  last_selected_neighborhood_id text,
 
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS api_response_cache (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  provider text NOT NULL,
+  operation text NOT NULL,
+  model text NOT NULL,
+  cache_key text NOT NULL UNIQUE,
+  request_payload jsonb NOT NULL,
+  response_payload jsonb NOT NULL,
+  hit_count integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  last_accessed_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS api_response_cache_provider_operation_idx
+  ON api_response_cache(provider, operation);
+
 ALTER TABLE neighborhood_profiles
   ADD COLUMN IF NOT EXISTS llm_profile jsonb NOT NULL DEFAULT '{}'::jsonb;
+
+ALTER TABLE neighborhood_profiles
+  ADD COLUMN IF NOT EXISTS external_metrics jsonb NOT NULL DEFAULT '{}'::jsonb;
+
+ALTER TABLE neighborhood_profiles
+  ADD COLUMN IF NOT EXISTS data_sources jsonb NOT NULL DEFAULT '{}'::jsonb;
 
 ALTER TABLE neighborhood_profiles
   DROP COLUMN IF EXISTS rentals;
 
 ALTER TABLE user_profiles
   ADD COLUMN IF NOT EXISTS source_place_context jsonb NOT NULL DEFAULT '{}'::jsonb;
+
+ALTER TABLE user_profiles
+  ADD COLUMN IF NOT EXISTS chat_messages jsonb NOT NULL DEFAULT '[]'::jsonb;
+
+ALTER TABLE user_profiles
+  ADD COLUMN IF NOT EXISTS last_selected_neighborhood_id text;

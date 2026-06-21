@@ -7,13 +7,14 @@ import { sql } from "drizzle-orm";
 import postgres from "postgres";
 
 import { getTomTomNeighborhoodPois, hasTomTomKey } from "@/lib/enrichment/tomtom";
+import { closeDb } from "@/lib/db/client";
 import { neighborhoodFeatureVectors } from "@/lib/db/seed-features";
 import { seedCities, type SeedNeighborhood } from "@/lib/db/seed-data";
 import {
   cities,
   neighborhoodProfiles,
   type NeighborhoodPlace,
-} from "@/lib/db/schema-minimal";
+} from "@/lib/db/schema";
 
 const COUNTRY_SET_BY_COUNTRY: Record<string, string> = {
   Canada: "CA",
@@ -198,6 +199,7 @@ async function main() {
     }
   } finally {
     await client.end();
+    await closeDb();
   }
 }
 

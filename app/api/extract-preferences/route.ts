@@ -19,6 +19,15 @@ function readString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function readStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        .filter(Boolean)
+    : [];
+}
+
 function parseRequestBody(body: ExtractPreferencesRequest) {
   const sourceNeighborhood =
     readString(body.sourceNeighborhood) ||
@@ -29,6 +38,11 @@ function parseRequestBody(body: ExtractPreferencesRequest) {
     readString(body.destinationCity) || readString(body.destinationCitySlug);
   const likes = readString(body.likes);
   const dislikes = readString(body.dislikes);
+  const mobilityPreference = readString(body.mobilityPreference);
+  const nearbyPriorities = readStringArray(body.nearbyPriorities);
+  const dailyLifeNotes = readString(body.dailyLifeNotes);
+  const lifestylePicks = readStringArray(body.lifestylePicks);
+  const tradeoffs = readStringArray(body.tradeoffs);
 
   const missing = [
     ["sourceNeighborhood", sourceNeighborhood],
@@ -50,6 +64,11 @@ function parseRequestBody(body: ExtractPreferencesRequest) {
       destinationCity,
       likes,
       dislikes,
+      mobilityPreference,
+      nearbyPriorities,
+      dailyLifeNotes,
+      lifestylePicks,
+      tradeoffs,
     } satisfies PreferenceExtractionInput,
   };
 }

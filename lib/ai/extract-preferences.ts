@@ -21,6 +21,11 @@ export type PreferenceExtractionInput = {
   destinationCity?: string;
   likes: string;
   dislikes?: string;
+  mobilityPreference?: string;
+  nearbyPriorities?: string[];
+  dailyLifeNotes?: string;
+  lifestylePicks?: string[];
+  tradeoffs?: string[];
 };
 
 export type PreferenceExtractionResult = {
@@ -64,7 +69,7 @@ function extractJsonObject(raw: string) {
   const lastBrace = trimmed.lastIndexOf("}");
 
   if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
-    throw new Error("No JSON object found in Groq response.");
+    throw new Error("No JSON object found in Llama response.");
   }
 
   return trimmed.slice(firstBrace, lastBrace + 1);
@@ -87,6 +92,21 @@ Destination city: ${input.destinationCity || "Not provided"}
 What the user loves:
 ${input.likes}
 
+Lifestyle cues they selected:
+${input.lifestylePicks?.length ? input.lifestylePicks.join(", ") : "Not provided"}
+
+How the user likes to get around:
+${input.mobilityPreference || "Not provided"}
+
+What they want close by:
+${input.nearbyPriorities?.length ? input.nearbyPriorities.join(", ") : "Not provided"}
+
+Daily life and exploration notes:
+${input.dailyLifeNotes || "Not provided"}
+
+Tradeoffs the user accepts:
+${input.tradeoffs?.length ? input.tradeoffs.join(", ") : "Not provided"}
+
 What the user would change:
 ${input.dislikes || "The user did not provide dislikes. Infer mostly from what they liked and keep uncertain dimensions neutral."}`;
 }
@@ -98,7 +118,7 @@ export async function extractPreferences(
     {
       role: "system",
       content: [
-        "You extract relocation lifestyle preferences for City Agent.",
+        "You extract relocation lifestyle preferences for Polaris.",
         "Return only a JSON object with exactly these numeric keys:",
         preferenceKeys.join(", "),
         "Each value must be a number from 0.0 to 1.0.",

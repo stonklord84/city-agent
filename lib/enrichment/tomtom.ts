@@ -1,3 +1,8 @@
+import {
+  getCachedApiResponse,
+  setCachedApiResponse,
+} from "@/lib/db/api-cache";
+
 export type TomTomPoiCategory =
   | "food"
   | "nightlife"
@@ -94,6 +99,31 @@ async function fetchTomTomSearch(params: {
     return [];
   }
 
+  const requestPayload = {
+    query: params.query,
+    lat: Number(params.lat.toFixed(5)),
+    lng: Number(params.lng.toFixed(5)),
+    countrySet: params.countrySet,
+    radiusMeters: params.radiusMeters ?? 1600,
+    limit: params.limit ?? 8,
+  };
+
+  const cacheInput = {
+    provider: "tomtom",
+    operation: "search.poi",
+    model: "search-api-v2",
+    requestPayload,
+  };
+
+  try {
+    const cached = await getCachedApiResponse(cacheInput);
+    if (cached) {
+      return JSON.parse(cached) as TomTomSearchResult[];
+    }
+  } catch (error) {
+    console.warn("[TomTom] Cache lookup failed; calling API.", error);
+  }
+
   const searchParams = new URLSearchParams({
     key,
     idxSet: "POI",
@@ -128,7 +158,18 @@ async function fetchTomTomSearch(params: {
       }
 
       const payload = (await response.json()) as TomTomSearchResponse;
-      return payload.results ?? [];
+      const results = payload.results ?? [];
+
+      try {
+        await setCachedApiResponse({
+          ...cacheInput,
+          content: JSON.stringify(results),
+        });
+      } catch (error) {
+        console.warn("[TomTom] Cache write failed.", error);
+      }
+
+      return results;
     } catch (err) {
       if (attempts >= maxAttempts) {
         throw err;

@@ -2,6 +2,7 @@ import { relations, sql } from "drizzle-orm";
 import {
   check,
   customType,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -45,14 +46,66 @@ export type LlmNeighborhoodProfile = {
   generatedAt?: string;
 };
 
+export type ExternalMetrics = {
+  zillowZoriCityRentUsd?: number;
+  zillowZoriRegionName?: string;
+  zillowZoriRegionType?: string;
+  zillowZoriAsOf?: string;
+  epaWalkabilityIndex?: number;
+  epaIntersectionDensity?: number;
+  epaTransitProximityMeters?: number;
+  epaEmploymentMix?: number;
+  epaEmploymentHousingMix?: number;
+  epaBlockGroupGeoid?: string;
+  epaWalkabilityMatchedAt?: string;
+  streetEasy?: {
+    url: string;
+    borough: string;
+    medianSaleLabel?: string;
+    medianSaleUsd?: number;
+    medianBaseRentUsd?: number;
+    mood?: string;
+    heart?: string;
+    bestPerk?: string;
+    biggestDownside?: string;
+    foodDrinkNote?: string;
+    similarNeighborhoods?: string[];
+    sourceMode: "scraped" | "snapshot";
+    fetchedAt: string;
+  };
+};
+
+export type DataSources = Record<
+  string,
+  {
+    name: string;
+    url: string;
+    fetchedAt: string;
+    notes?: string;
+  }
+>;
+
 export type SourcePlaceContext = {
   sourceNeighborhood?: string;
   sourceCity?: string;
   likes?: string;
   dislikes?: string;
+  mobilityPreference?: string;
+  weatherPreference?: string;
+  nearbyPriorities?: string[];
+  dailyLifeNotes?: string;
+  intent?: string;
+  lifestylePicks?: string[];
+  tradeoffs?: string[];
   preferences?: Record<string, number>;
   generatedBy?: string;
   generatedAt?: string;
+};
+
+export type PersistedChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
 };
 
 export const cities = pgTable(
@@ -110,6 +163,14 @@ export const neighborhoodProfiles = pgTable(
       .default([]),
     llmProfile: jsonb("llm_profile")
       .$type<LlmNeighborhoodProfile>()
+      .notNull()
+      .default({}),
+    externalMetrics: jsonb("external_metrics")
+      .$type<ExternalMetrics>()
+      .notNull()
+      .default({}),
+    dataSources: jsonb("data_sources")
+      .$type<DataSources>()
       .notNull()
       .default({}),
 
@@ -173,6 +234,11 @@ export const userProfiles = pgTable("user_profiles", {
     .$type<SourcePlaceContext>()
     .notNull()
     .default({}),
+  chatMessages: jsonb("chat_messages")
+    .$type<PersistedChatMessage[]>()
+    .notNull()
+    .default([]),
+  lastSelectedNeighborhoodId: text("last_selected_neighborhood_id"),
 
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
@@ -181,6 +247,40 @@ export const userProfiles = pgTable("user_profiles", {
     .defaultNow()
     .notNull(),
 });
+
+export const apiResponseCache = pgTable(
+  "api_response_cache",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    provider: text("provider").notNull(),
+    operation: text("operation").notNull(),
+    model: text("model").notNull(),
+    cacheKey: text("cache_key").notNull().unique(),
+    requestPayload: jsonb("request_payload").notNull(),
+    responsePayload: jsonb("response_payload")
+      .$type<{ content: string }>()
+      .notNull(),
+    hitCount: integer("hit_count").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    lastAccessedAt: timestamp("last_accessed_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    cacheKeyIdx: uniqueIndex("api_response_cache_cache_key_idx").on(
+      table.cacheKey,
+    ),
+    providerOperationIdx: index("api_response_cache_provider_operation_idx").on(
+      table.provider,
+      table.operation,
+    ),
+  }),
+);
 
 export const citiesRelations = relations(cities, ({ many }) => ({
   neighborhoodProfiles: many(neighborhoodProfiles),
@@ -207,3 +307,4 @@ export const userProfilesRelations = relations(userProfiles, ({ one }) => ({
 export type City = typeof cities.$inferSelect;
 export type NeighborhoodProfile = typeof neighborhoodProfiles.$inferSelect;
 export type UserProfile = typeof userProfiles.$inferSelect;
+export type ApiResponseCache = typeof apiResponseCache.$inferSelect;

@@ -51,7 +51,7 @@ function MobileMenu({
         <div className="flex items-center justify-between p-5 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
             <LogoMark size={24} />
-            <span className="font-semibold text-slate-900 text-base">City Agent</span>
+            <span className="font-semibold text-slate-900 text-base">Polaris</span>
           </div>
           <button
             onClick={onClose}
@@ -101,11 +101,11 @@ export default function Navbar() {
             <Link
               href="/"
               className="flex items-center gap-2.5 focus-visible:rounded-lg"
-              aria-label="City Agent — go to homepage"
+              aria-label="Polaris — go to homepage"
             >
               <LogoMark size={28} />
               <span className="text-[16px] font-semibold text-slate-900 tracking-tight">
-                City Agent
+                Polaris
               </span>
             </Link>
 

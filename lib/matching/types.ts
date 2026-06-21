@@ -8,6 +8,11 @@ export interface MatchResult {
   scoreBreakdown: {
     similarity: number; // 0 - 100
     budgetFit: number; // 0 - 100
+    llmAdjustment?: number;
+  };
+  llmCalibration?: {
+    scoreDelta: number;
+    reason: string;
   };
   features: {
     walkability: number;
@@ -39,6 +44,21 @@ export interface MatchResult {
     epaEmploymentHousingMix?: number;
     epaBlockGroupGeoid?: string;
     epaWalkabilityMatchedAt?: string;
+    streetEasy?: {
+      url: string;
+      borough: string;
+      medianSaleLabel?: string;
+      medianSaleUsd?: number;
+      medianBaseRentUsd?: number;
+      mood?: string;
+      heart?: string;
+      bestPerk?: string;
+      biggestDownside?: string;
+      foodDrinkNote?: string;
+      similarNeighborhoods?: string[];
+      sourceMode: "scraped" | "snapshot";
+      fetchedAt: string;
+    };
   };
   dataSources?: Record<
     string,

@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
-import { neighborhoodProfiles, cities } from "@/lib/db/schema-minimal";
+import { neighborhoodProfiles, cities } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { scoreNeighborhoods } from "@/lib/matching/score";
 import { PreferenceVector } from "@/lib/ai/extract-preferences";
+import { calibrateMatchesWithLlama } from "@/lib/ai/calibrate-matches";
 
 export const runtime = "nodejs";
 
@@ -12,12 +13,21 @@ interface MatchRequestBody {
   budgetMin: number;
   budgetMax: number;
   citySlug: string;
+  source?: {
+    sourceNeighborhood?: string;
+    likes?: string;
+    mobilityPreference?: string;
+    nearbyPriorities?: string[];
+    dailyLifeNotes?: string;
+    lifestylePicks?: string[];
+    tradeoffs?: string[];
+  };
 }
 
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as MatchRequestBody;
-    const { preferences, budgetMin, budgetMax, citySlug } = body;
+    const { preferences, budgetMin, budgetMax, citySlug, source } = body;
 
     if (!preferences || typeof budgetMin !== "number" || typeof budgetMax !== "number" || !citySlug) {
       return NextResponse.json(
@@ -54,12 +64,25 @@ export async function POST(request: Request) {
     }));
 
     // 3. Compute matching scores
-    const matches = scoreNeighborhoods(
+    const deterministicMatches = scoreNeighborhoods(
       preferences,
       budgetMin,
       budgetMax,
       neighborhoodsWithFeatures
     );
+    let matches = deterministicMatches;
+
+    try {
+      matches = await calibrateMatchesWithLlama({
+        source,
+        preferences,
+        budgetMin,
+        budgetMax,
+        matches: deterministicMatches,
+      });
+    } catch (error) {
+      console.warn("Llama match calibration failed; using deterministic matches.", error);
+    }
 
     return NextResponse.json({
       data: {

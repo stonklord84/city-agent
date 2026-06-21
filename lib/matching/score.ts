@@ -1,5 +1,5 @@
 import { PreferenceVector, PreferenceKey } from "@/lib/ai/extract-preferences";
-import { City, NeighborhoodProfile } from "@/lib/db/schema-minimal";
+import { City, NeighborhoodProfile } from "@/lib/db/schema";
 import { MatchResult } from "./types";
 
 type ProfileFeatureKey =
@@ -37,7 +37,9 @@ const FEATURE_LABELS: Record<ProfileFeatureKey, string> = {
   diversity: "Rich cultural diversity",
 };
 
-// Pure cosine similarity between two vectors
+// Pure cosine similarity between two vectors. Kept for reference and tests, but
+// runtime scoring uses weighted feature closeness because cosine is too generous
+// when most lifestyle vectors are positive.
 export function cosineSimilarity(
   vecA: Record<string, number>,
   vecB: Record<string, number>,
@@ -57,6 +59,28 @@ export function cosineSimilarity(
 
   if (normA === 0 || normB === 0) return 0.5;
   return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
+export function weightedFeatureCloseness(
+  userPrefs: PreferenceVector,
+  dbVector: Record<string, number>,
+  keys: string[],
+): number {
+  let weightedTotal = 0;
+  let weightSum = 0;
+
+  for (const key of keys) {
+    const userValue = userPrefs[key as PreferenceKey] ?? 0.5;
+    const dbValue = dbVector[key] ?? 0.5;
+    const importance = 0.65 + Math.abs(userValue - 0.5) * 1.4;
+    const closeness = 1 - Math.abs(userValue - dbValue);
+
+    weightedTotal += Math.max(0, closeness) * importance;
+    weightSum += importance;
+  }
+
+  if (weightSum === 0) return 0.5;
+  return weightedTotal / weightSum;
 }
 
 // Calculates how well the neighborhood's rent range fits the user's budget
@@ -84,6 +108,12 @@ export function calculateBudgetFit(
   }
 
   return 0.5;
+}
+
+function calibrateSimilarity(similarity: number) {
+  const floor = 0.72;
+  const calibrated = (similarity - floor) / (1 - floor);
+  return Math.min(1, Math.max(0, calibrated));
 }
 
 // Generate the top 3 natural language reasons for the match
@@ -129,7 +159,7 @@ export function scoreNeighborhoods(
       dbVector[userKey] = (features[dbKey] as number) ?? 0.5;
     }
 
-    const similarity = cosineSimilarity(userPrefs, dbVector, keys);
+    const similarity = weightedFeatureCloseness(userPrefs, dbVector, keys);
 
     // 2. Calculate budget fit score
     const budgetFit = calculateBudgetFit(
@@ -139,8 +169,10 @@ export function scoreNeighborhoods(
       neighborhood.rentMax
     );
 
-    // 3. Blend scores: 70% similarity, 30% budget fit
-    const rawScore = similarity * 0.7 + budgetFit * 0.3;
+    // 3. Blend scores. Cosine similarity is generous with positive vectors,
+    // so remap it to a stricter curve before combining with budget fit.
+    const calibratedSimilarity = calibrateSimilarity(similarity);
+    const rawScore = calibratedSimilarity * 0.7 + budgetFit * 0.3;
     const score = Math.round(rawScore * 100);
 
     // 4. Generate top reasons
@@ -154,7 +186,7 @@ export function scoreNeighborhoods(
       score,
       reasons,
       scoreBreakdown: {
-        similarity: Math.round(similarity * 100),
+        similarity: Math.round(calibratedSimilarity * 100),
         budgetFit: Math.round(budgetFit * 100),
       },
       features: {

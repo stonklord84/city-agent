@@ -1,5 +1,5 @@
 {
-  "name": "city-agent",
+  "name": "polaris",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -10,12 +10,9 @@
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:setup:minimal": "tsx lib/db/setup-minimal-schema.ts",
+    "db:setup": "tsx lib/db/setup-schema.ts",
     "db:enrich": "tsx lib/db/enrich-location-profiles.ts",
-    "db:fill:groq": "tsx lib/db/fill-location-profiles-with-groq.ts",
-    "db:enrich:external": "tsx lib/db/enrich-external-datasets.ts",
-    "db:copy:aurora": "tsx lib/db/copy-neon-to-aurora.ts",
-    "db:export:sql": "tsx lib/db/export-neon-to-sql.ts",
+    "db:copy:aurora:data-api": "tsx lib/db/copy-neon-to-aurora-data-api.ts",
     "db:test:data-api": "tsx lib/db/test-aurora-data-api.ts"
   },
   "dependencies": {

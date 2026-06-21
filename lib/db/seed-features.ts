@@ -102,7 +102,40 @@ export const neighborhoodFeatureVectors: Record<string, FeatureVector> = {
     walkability: 0.88, transit: 0.85, nightlife: 0.65, safety: 0.72,
     cafes: 0.75, parks: 0.62, youngProfessionals: 0.60, affordability: 0.65, diversity: 0.99,
   },
+  "greenpoint": {
+    walkability: 0.91, transit: 0.78, nightlife: 0.72, safety: 0.78,
+    cafes: 0.90, parks: 0.72, youngProfessionals: 0.84, affordability: 0.28, diversity: 0.78,
+  },
+  "chelsea": {
+    walkability: 0.98, transit: 0.94, nightlife: 0.86, safety: 0.70,
+    cafes: 0.88, parks: 0.62, youngProfessionals: 0.88, affordability: 0.14, diversity: 0.76,
+  },
+  "upper-east-side": {
+    walkability: 0.96, transit: 0.86, nightlife: 0.45, safety: 0.86,
+    cafes: 0.78, parks: 0.90, youngProfessionals: 0.62, affordability: 0.18, diversity: 0.68,
+  },
+  "financial-district": {
+    walkability: 0.97, transit: 0.99, nightlife: 0.58, safety: 0.76,
+    cafes: 0.76, parks: 0.70, youngProfessionals: 0.88, affordability: 0.20, diversity: 0.78,
+  },
+  "bedford-stuyvesant": {
+    walkability: 0.86, transit: 0.78, nightlife: 0.66, safety: 0.66,
+    cafes: 0.80, parks: 0.68, youngProfessionals: 0.78, affordability: 0.50, diversity: 0.92,
+  },
+  "sunnyside": {
+    walkability: 0.88, transit: 0.88, nightlife: 0.52, safety: 0.78,
+    cafes: 0.70, parks: 0.60, youngProfessionals: 0.62, affordability: 0.62, diversity: 0.88,
+  },
 
+  // New Jersey
+  "jersey-city": {
+    walkability: 0.88, transit: 0.92, nightlife: 0.70, safety: 0.72,
+    cafes: 0.80, parks: 0.72, youngProfessionals: 0.86, affordability: 0.46, diversity: 0.88,
+  },
+  "hoboken": {
+    walkability: 0.96, transit: 0.90, nightlife: 0.82, safety: 0.76,
+    cafes: 0.82, parks: 0.72, youngProfessionals: 0.92, affordability: 0.30, diversity: 0.72,
+  },
   // Mumbai
   "bandra-west": {
     walkability: 0.72, transit: 0.78, nightlife: 0.88, safety: 0.75,

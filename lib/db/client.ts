@@ -59,11 +59,7 @@ export const db = drizzle(pool, {
 
 
 export async function closeDb() {
-  if (!_queryClient) return;
-
-  await _queryClient.end();
-  _queryClient = null;
-  _db = null;
+  await pool.end();
 }
 
 // Lazily initialize the connection so that importing this module does not

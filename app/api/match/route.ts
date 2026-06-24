@@ -92,6 +92,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("Match route error:", error);
+    console.error("DB_DEBUG_ERROR_DETAIL:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Neighborhood matching failed." },
       { status: 500 }

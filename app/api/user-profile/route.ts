@@ -90,6 +90,41 @@ async function getCityId(citySlug: string) {
   return city?.id;
 }
 
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const profileId = searchParams.get("profileId");
+
+    if (!profileId) {
+      return NextResponse.json(
+        { error: "profileId is required." },
+        { status: 400 },
+      );
+    }
+
+    const [profile] = await db
+      .select()
+      .from(userProfiles)
+      .where(eq(userProfiles.id, profileId))
+      .limit(1);
+
+    if (!profile) {
+      return NextResponse.json(
+        { error: "Profile not found." },
+        { status: 404 },
+      );
+    }
+
+    return NextResponse.json({ data: profile });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json(
+      { error: "Failed to fetch user profile." },
+      { status: 500 },
+    );
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as UserProfilePayload;

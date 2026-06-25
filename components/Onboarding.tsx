@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { DEFAULT_TEST_CASE_ID, QUIZ_TEST_CASES, getQuizTestCase } from "@/lib/quiz-test-cases";
 
 interface OnboardingProps {
   onComplete?: (data: {
@@ -36,33 +37,33 @@ const CITIES = [
     minBound: 800,
     maxBound: 8000,
     step: 100,
-    desc: "Energy, iconic skyline, and infinite variety.",
+    desc: "Dense, walkable, always on.",
   },
   {
     name: "Toronto",
     slug: "toronto",
     country: "Canada",
-    currency: "USD",
-    symbol: "$",
-    defaultMin: 1200,
+    currency: "CAD",
+    symbol: "C$",
+    defaultMin: 1500,
     defaultMax: 3500,
-    minBound: 800,
+    minBound: 1000,
     maxBound: 6000,
     step: 100,
-    desc: "Diverse culture, safe streets, and parklands.",
+    desc: "Diverse, practical, park-rich.",
   },
   {
     name: "Mumbai",
     slug: "mumbai",
     country: "India",
-    currency: "USD",
-    symbol: "$",
-    defaultMin: 500,
-    defaultMax: 1800,
-    minBound: 250,
-    maxBound: 3500,
-    step: 50,
-    desc: "Maximum City: vibrant nightlife, sea breeze, and rich history.",
+    currency: "INR",
+    symbol: "₹",
+    defaultMin: 40000,
+    defaultMax: 150000,
+    minBound: 20000,
+    maxBound: 300000,
+    step: 5000,
+    desc: "Coastal, social, high-energy.",
   },
 ];
 
@@ -113,49 +114,86 @@ const TRADEOFF_OPTIONS = [
 
 const TOTAL_STEPS = 5;
 
+function CitySilhouette({ slug }: { slug: string }) {
+  if (slug === "toronto") {
+    return (
+      <svg viewBox="0 0 180 64" className="h-16 w-44" aria-hidden="true">
+        <path d="M8 54h164v7H8z" fill="currentColor" />
+        <path d="M24 34h16v20H24zM47 26h18v28H47zM72 38h14v16H72zM94 20h15v34H94zM118 31h17v23h-17zM143 39h13v15h-13z" fill="currentColor" />
+        <path d="M88 54h10l4-36 3-5 3 5 4 36h10l-9-39h-5l-3-12-3 12h-5z" fill="currentColor" />
+        <path d="M97 23h16v4H97z" fill="currentColor" />
+      </svg>
+    );
+  }
+
+  if (slug === "mumbai") {
+    return (
+      <svg viewBox="0 0 180 64" className="h-16 w-44" aria-hidden="true">
+        <path d="M8 54h164v7H8z" fill="currentColor" />
+        <path d="M36 28h108v26H36z" fill="currentColor" />
+        <path d="M48 18h20v10H48zM112 18h20v10h-20z" fill="currentColor" />
+        <path d="M54 10l12 8H42zM126 10l12 8h-24zM90 8l22 20H68z" fill="currentColor" />
+        <path d="M75 54V37c0-8 6-15 15-15s15 7 15 15v17H75z" fill="white" opacity="0.72" />
+        <path d="M48 38h10v16H48zM122 38h10v16h-10z" fill="white" opacity="0.72" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 180 64" className="h-16 w-44" aria-hidden="true">
+      <path d="M8 54h164v7H8z" fill="currentColor" />
+      <path d="M22 35h14v19H22zM42 25h18v29H42zM66 32h14v22H66zM86 12h16v42H86zM108 29h18v25h-18zM132 20h17v34h-17zM154 38h12v16h-12z" fill="currentColor" />
+      <path d="M91 12l3-10 3 10z" fill="currentColor" />
+      <path d="M42 21h18v4H42zM132 16h17v4h-17z" fill="currentColor" />
+    </svg>
+  );
+}
+
 export default function Onboarding({ onComplete }: OnboardingProps) {
   const router = useRouter();
+  const seededTestCase = getQuizTestCase(DEFAULT_TEST_CASE_ID);
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [revealProgress, setRevealProgress] = useState(0);
   const [autoSubmitted, setAutoSubmitted] = useState(false);
+  const [selectedTestCaseId, setSelectedTestCaseId] = useState(seededTestCase.id);
+  const [showDevOptions, setShowDevOptions] = useState(false);
 
   // Form State
-  const [sourceNeighborhood, setSourceNeighborhood] = useState("Atlanta, USA");
-  const [likes, setLikes] = useState(
-    "I liked the tree-lined neighborhoods, friendly energy, coffee shops, parks, good food, and that it felt social without being as intense as New York.",
-  );
-  const [lifestylePicks, setLifestylePicks] = useState<string[]>([
-    "Good coffee",
-    "Parks nearby",
-    "Social energy",
-    "Groceries close",
-  ]);
-  const [mobilityPreference, setMobilityPreference] = useState("Public transport");
-  const [nearbyPriorities, setNearbyPriorities] = useState<string[]>([
-    "Grocery shops",
-    "Coffee shops",
-    "Parks",
-  ]);
-  const [dailyLifeNotes, setDailyLifeNotes] = useState(
-    "I want easy everyday errands, a few comfortable places to work or read, and enough things nearby that weekends do not feel repetitive.",
-  );
-  const [tradeoffs, setTradeoffs] = useState<string[]>([
-    "Transit access over driving",
-    "Better location over more space",
-  ]);
-  const [destCitySlug, setDestCitySlug] = useState("nyc");
+  const [destCitySlug, setDestCitySlug] = useState<string>(seededTestCase.citySlug);
+  const [sourceNeighborhood, setSourceNeighborhood] = useState(seededTestCase.sourcePlace);
+  const [likes, setLikes] = useState(seededTestCase.likes);
+  const [lifestylePicks, setLifestylePicks] = useState<string[]>(seededTestCase.lifestylePicks);
+  const [mobilityPreference, setMobilityPreference] = useState(seededTestCase.mobilityPreference);
+  const [nearbyPriorities, setNearbyPriorities] = useState<string[]>(seededTestCase.nearbyPriorities);
+  const [dailyLifeNotes, setDailyLifeNotes] = useState(seededTestCase.usefulPlacesNearby);
+  const [tradeoffs, setTradeoffs] = useState<string[]>(seededTestCase.tradeoffs);
   
   // Budget values
   const currentCityConfig = CITIES.find((c) => c.slug === destCitySlug) || CITIES[0];
-  const [budgetMin, setBudgetMin] = useState(currentCityConfig.defaultMin);
-  const [budgetMax, setBudgetMax] = useState(currentCityConfig.defaultMax);
+  const [budgetMin, setBudgetMin] = useState(seededTestCase.budgetMin);
+  const [budgetMax, setBudgetMax] = useState(seededTestCase.budgetMax);
 
   const handleCitySelect = (slug: string) => {
     setDestCitySlug(slug);
     const config = CITIES.find((c) => c.slug === slug)!;
     setBudgetMin(config.defaultMin);
     setBudgetMax(config.defaultMax);
+  };
+
+  const applyTestCase = (testCaseId: string) => {
+    const testCase = getQuizTestCase(testCaseId);
+    setSelectedTestCaseId(testCase.id);
+    setDestCitySlug(testCase.citySlug);
+    setSourceNeighborhood(testCase.sourcePlace);
+    setLikes(testCase.likes);
+    setLifestylePicks(testCase.lifestylePicks);
+    setMobilityPreference(testCase.mobilityPreference);
+    setNearbyPriorities(testCase.nearbyPriorities);
+    setDailyLifeNotes(testCase.usefulPlacesNearby);
+    setTradeoffs(testCase.tradeoffs);
+    setBudgetMin(testCase.budgetMin);
+    setBudgetMax(testCase.budgetMax);
+    setAutoSubmitted(false);
   };
 
   const nextStep = () => {
@@ -171,7 +209,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     setNearbyPriorities((current) =>
       current.includes(priority)
         ? current.filter((item) => item !== priority)
-        : [...current, priority],
+        : [...current, priority]
     );
   };
 
@@ -179,7 +217,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     setLifestylePicks((current) =>
       current.includes(pick)
         ? current.filter((item) => item !== pick)
-        : [...current, pick],
+        : [...current, pick]
     );
   };
 
@@ -187,31 +225,29 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     setTradeoffs((current) =>
       current.includes(tradeoff)
         ? current.filter((item) => item !== tradeoff)
-        : [...current, tradeoff],
+        : [...current, tradeoff]
     );
   };
 
   useEffect(() => {
     if (step !== TOTAL_STEPS) {
-      setRevealProgress(0);
       setAutoSubmitted(false);
       return;
     }
 
-    setRevealProgress(0);
-    setAutoSubmitted(false);
-    const timings = [520, 1350, 2450, 3350, 4650];
-    const timers = timings.map((delay, index) =>
-      window.setTimeout(() => setRevealProgress(index + 1), delay),
-    );
-
-    return () => {
-      timers.forEach(window.clearTimeout);
-    };
-  }, [step]);
+    if (!autoSubmitted && !loading) {
+      setAutoSubmitted(true);
+      void handleSubmit();
+    }
+  }, [autoSubmitted, loading, step]);
 
   const handleSubmit = async () => {
     setLoading(true);
+    
+    // For Mumbai, convert budget back to USD database scale (divided by 83)
+    const finalBudgetMin = destCitySlug === "mumbai" ? Math.round(budgetMin / 83) : budgetMin;
+    const finalBudgetMax = destCitySlug === "mumbai" ? Math.round(budgetMax / 83) : budgetMax;
+
     try {
       // 1. Call extraction API
       const res = await fetch("/api/extract-preferences", {
@@ -248,8 +284,8 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           tradeoffs,
         },
         preferences: extractedPrefs,
-        budgetMin,
-        budgetMax,
+        budgetMin: finalBudgetMin,
+        budgetMax: finalBudgetMax,
         citySlug: destCitySlug,
         profileId: undefined as string | undefined,
       };
@@ -303,8 +339,8 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           affordability: 0.5,
           diversity: 0.5,
         },
-        budgetMin,
-        budgetMax,
+        budgetMin: finalBudgetMin,
+        budgetMax: finalBudgetMax,
         citySlug: destCitySlug,
       };
       try {
@@ -319,7 +355,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           JSON.stringify({
             ...sessionData,
             profileId: profilePayload.data?.profileId,
-          }),
+          })
         );
       } catch (profileError) {
         console.error("Profile save failed:", profileError);
@@ -333,34 +369,6 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
 
   // Helper for progress bar
   const percent = Math.round(((step - 1) / (TOTAL_STEPS - 1)) * 100);
-  const revealItems = useMemo(
-    () => [
-      `Moving to ${currentCityConfig.name}`,
-      `Old-place signal: ${sourceNeighborhood}`,
-      `${lifestylePicks.length || 0} lifestyle cues selected`,
-      `${nearbyPriorities.length || 0} nearby priorities selected`,
-      `${tradeoffs.length || 0} tradeoffs accepted`,
-    ],
-    [
-      currentCityConfig.name,
-      sourceNeighborhood,
-      lifestylePicks.length,
-      nearbyPriorities.length,
-      tradeoffs.length,
-    ],
-  );
-
-  useEffect(() => {
-    if (
-      step === TOTAL_STEPS &&
-      revealProgress === revealItems.length &&
-      !autoSubmitted &&
-      !loading
-    ) {
-      setAutoSubmitted(true);
-      void handleSubmit();
-    }
-  }, [autoSubmitted, loading, revealProgress, revealItems.length, step]);
 
   return (
     <div className="w-full max-w-2xl mx-auto bg-white rounded-[28px] p-5 sm:p-6 shadow-soft-xl relative overflow-hidden transition-all duration-500 ring-1 ring-slate-100">
@@ -381,22 +389,31 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
               Where are you moving?
             </h2>
             <p className="text-slate-500 text-sm mb-4">
-              Pick one of the cities we support right now.
+              Select your destination city to align currency and budget standards.
             </p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               {CITIES.map((city) => (
                 <button
                   key={city.slug}
                   onClick={() => handleCitySelect(city.slug)}
-                  className={`rounded-2xl p-4 text-left transition-all duration-300 ${
+                  className={`relative min-h-[150px] overflow-hidden rounded-2xl p-4 text-left transition-all duration-300 ${
                     destCitySlug === city.slug
                       ? "bg-blue-500 text-white shadow-brand scale-[1.03] -rotate-1"
                       : "bg-slate-50 hover:bg-blue-50 hover:scale-[1.02] hover:-rotate-1"
                   }`}
                 >
-                  <h3 className={`text-lg font-bold ${destCitySlug === city.slug ? "text-white" : "text-slate-900"}`}>{city.name}</h3>
-                  <span className={`text-xs block mb-2 ${destCitySlug === city.slug ? "text-white/80" : "text-slate-500"}`}>{city.country}</span>
-                  <p className={`text-xs leading-relaxed ${destCitySlug === city.slug ? "text-white/90" : "text-slate-500"}`}>{city.desc}</p>
+                  <div
+                    className={`pointer-events-none absolute -bottom-6 -right-8 ${
+                      destCitySlug === city.slug ? "text-white/18" : "text-slate-300/70"
+                    }`}
+                  >
+                    <CitySilhouette slug={city.slug} />
+                  </div>
+                  <div className="relative z-10 max-w-[8.5rem]">
+                    <h3 className={`text-lg font-bold ${destCitySlug === city.slug ? "text-white" : "text-slate-900"}`}>{city.name}</h3>
+                    <span className={`text-xs block mb-2 ${destCitySlug === city.slug ? "text-white/80" : "text-slate-500"}`}>{city.country}</span>
+                    <p className={`text-xs leading-relaxed ${destCitySlug === city.slug ? "text-white/90" : "text-slate-500"}`}>{city.desc}</p>
+                  </div>
                 </button>
               ))}
             </div>
@@ -551,135 +568,99 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
               </div>
             </div>
 
-            <div className="space-y-6 px-2">
-              <div>
-                <div className="flex justify-between text-xs text-slate-500 mb-1 font-medium">
-                  <span>Min Budget</span>
-                  <span>{currentCityConfig.symbol}{budgetMin.toLocaleString()}</span>
-                </div>
+            <div className="px-2">
+              <div className="flex justify-between text-xs text-slate-500 mb-3 font-medium">
+                <span>Min {currentCityConfig.symbol}{budgetMin.toLocaleString()}</span>
+                <span>Max {currentCityConfig.symbol}{budgetMax.toLocaleString()}</span>
+              </div>
+
+              <div className="dual-range-slider relative h-8">
+                <div className="absolute left-0 right-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-slate-200" />
+                <div
+                  className="absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-blue-600"
+                  style={{
+                    left: `${((budgetMin - currentCityConfig.minBound) / (currentCityConfig.maxBound - currentCityConfig.minBound)) * 100}%`,
+                    right: `${100 - ((budgetMax - currentCityConfig.minBound) / (currentCityConfig.maxBound - currentCityConfig.minBound)) * 100}%`,
+                  }}
+                />
                 <input
                   type="range"
                   min={currentCityConfig.minBound}
-                  max={budgetMax - currentCityConfig.step}
+                  max={currentCityConfig.maxBound}
                   step={currentCityConfig.step}
                   value={budgetMin}
-                  onChange={(e) => setBudgetMin(Number(e.target.value))}
-                  className="w-full accent-blue-600 bg-slate-200 rounded-lg appearance-none h-1.5 cursor-pointer"
+                  onChange={(e) =>
+                    setBudgetMin(Math.min(Number(e.target.value), budgetMax - currentCityConfig.step))
+                  }
+                  className="absolute left-0 top-1/2 z-20 w-full -translate-y-1/2"
+                  aria-label="Minimum rent budget"
                 />
-              </div>
-
-              <div>
-                <div className="flex justify-between text-xs text-slate-500 mb-1 font-medium">
-                  <span>Max Budget</span>
-                  <span>{currentCityConfig.symbol}{budgetMax.toLocaleString()}</span>
-                </div>
                 <input
                   type="range"
-                  min={budgetMin + currentCityConfig.step}
+                  min={currentCityConfig.minBound}
                   max={currentCityConfig.maxBound}
                   step={currentCityConfig.step}
                   value={budgetMax}
-                  onChange={(e) => setBudgetMax(Number(e.target.value))}
-                  className="w-full accent-blue-600 bg-slate-200 rounded-lg appearance-none h-1.5 cursor-pointer"
+                  onChange={(e) =>
+                    setBudgetMax(Math.max(Number(e.target.value), budgetMin + currentCityConfig.step))
+                  }
+                  className="absolute left-0 top-1/2 z-30 w-full -translate-y-1/2"
+                  aria-label="Maximum rent budget"
                 />
+              </div>
+
+              <div className="mt-1 flex justify-between text-[10px] font-semibold text-slate-400">
+                <span>{currentCityConfig.symbol}{currentCityConfig.minBound.toLocaleString()}</span>
+                <span>{currentCityConfig.symbol}{currentCityConfig.maxBound.toLocaleString()}</span>
               </div>
             </div>
 
             <div className="mt-6">
-              <label className="block text-slate-600 text-sm mb-2 font-medium">What tradeoffs are you okay with?</label>
-              <div className="flex flex-wrap gap-2">
-                {TRADEOFF_OPTIONS.map((option) => {
-                  const selected = tradeoffs.includes(option);
-                  return (
-                    <button
-                      key={option}
-                      type="button"
-                      onClick={() => toggleTradeoff(option)}
-                      className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all ${
-                        selected
-                          ? "bg-slate-900 text-white shadow-soft"
-                          : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900"
-                      }`}
-                    >
-                      {option}
-                    </button>
-                  );
-                })}
+              <div>
+                <label className="block text-slate-600 text-sm mb-2 font-medium">What tradeoffs are you okay with?</label>
+                <div className="flex flex-wrap gap-2">
+                  {TRADEOFF_OPTIONS.map((option) => {
+                    const selected = tradeoffs.includes(option);
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => toggleTradeoff(option)}
+                        className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all ${
+                          selected
+                            ? "bg-slate-900 text-white shadow-soft"
+                            : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900"
+                        }`}
+                      >
+                        {option}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* STEP 5: Reveal */}
+        {/* STEP 5: Loading */}
         {step === 5 && (
           <div className="animate-fadeIn">
             <span className="text-blue-600 text-xs font-semibold uppercase tracking-wider">Step 5 of 5</span>
             <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mt-1.5 mb-2">
-              Your relocation profile is ready.
+              Looking for your new home base.
             </h2>
             <p className="text-slate-500 text-sm mb-5">
-              Polaris will rank neighborhoods, check budget fit, and surface practical places nearby.
+              We are comparing your old-place signal, budget, and everyday routines against neighborhoods in {currentCityConfig.name}.
             </p>
-            <div className="relative grid gap-3 overflow-hidden rounded-3xl bg-slate-50 p-3">
-              <div className="absolute left-6 top-8 bottom-8 w-0.5 bg-slate-200" aria-hidden />
-              <div
-                className="absolute left-6 top-8 w-0.5 origin-top bg-emerald-500 transition-all duration-300 ease-out"
-                style={{
-                  height: `${Math.max(0, ((revealProgress - 1) / 4) * 100)}%`,
-                  maxHeight: "calc(100% - 4rem)",
-                }}
-                aria-hidden
-              />
-              {revealItems.map((item, index) => {
-                const complete = revealProgress > index;
-                const active = revealProgress === index;
-
-                return (
-                  <div
-                    key={item}
-                    className={`relative z-10 flex items-center gap-3 rounded-2xl px-4 py-3 transition-all duration-300 ${
-                      complete
-                        ? "reveal-pop bg-emerald-50 shadow-soft-sm ring-1 ring-emerald-100"
-                        : active
-                          ? "bg-white ring-1 ring-blue-100"
-                          : "bg-white/70"
-                    }`}
-                  >
-                    <span
-                      className={`flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-black transition-all duration-300 ${
-                        complete
-                          ? "bg-emerald-500 text-white shadow-[0_8px_18px_rgba(16,185,129,0.28)]"
-                          : active
-                            ? "bg-blue-600 text-white"
-                            : "bg-slate-200 text-slate-500"
-                      }`}
-                    >
-                      {complete ? "OK" : index + 1}
-                    </span>
-                    <span
-                      className={`text-sm font-semibold transition-colors ${
-                        complete ? "text-emerald-900" : "text-slate-700"
-                      }`}
-                    >
-                      {item}
-                    </span>
-                  </div>
-                );
-              })}
+            <div className="flex min-h-[220px] flex-col items-center justify-center rounded-3xl bg-slate-50 p-8 text-center">
+              <span className="mb-5 h-12 w-12 rounded-full border-4 border-blue-100 border-t-blue-600 animate-spin" />
+              <h3 className="text-lg font-bold text-slate-900">
+                Finding neighborhoods that feel like a fit.
+              </h3>
+              <p className="mt-2 max-w-sm text-sm leading-relaxed text-slate-500">
+                Checking lifestyle fit, rent range, transit, and useful places nearby.
+              </p>
             </div>
-
-            <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
-              <div
-                className="h-full rounded-full bg-emerald-500 transition-all duration-300 ease-out"
-                style={{ width: `${(revealProgress / revealItems.length) * 100}%` }}
-              />
-            </div>
-
-            <p className="mt-3 text-center text-xs font-semibold text-slate-500">
-              {revealProgress === revealItems.length
-                ? "Opening your matches..."
-                : "Building your neighborhood match profile..."}
-            </p>
           </div>
         )}
 
@@ -719,6 +700,38 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           </div>
         </div>
       </div>
+
+      {step < TOTAL_STEPS && (
+        <div className="fixed bottom-3 right-3 z-50 text-right">
+          {showDevOptions && (
+            <div className="mb-2 w-[min(18rem,calc(100vw-2rem))] rounded-2xl border border-slate-200 bg-white/95 p-3 text-left shadow-soft-xl backdrop-blur">
+              <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                Testing preset
+              </label>
+              <select
+                value={selectedTestCaseId}
+                onChange={(event) => applyTestCase(event.target.value)}
+                className="w-full rounded-xl border-2 border-transparent bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-800 outline-none transition-all focus:border-blue-400 focus:bg-white"
+                aria-label="Load a quiz test case"
+              >
+                {QUIZ_TEST_CASES.map((testCase) => (
+                  <option key={testCase.id} value={testCase.id}>
+                    {testCase.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowDevOptions((value) => !value)}
+            className="text-[10px] font-semibold text-slate-300 transition-colors hover:text-slate-500"
+            aria-expanded={showDevOptions}
+          >
+            dev
+          </button>
+        </div>
+      )}
     </div>
   );
 }

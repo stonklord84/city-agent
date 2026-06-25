@@ -2,7 +2,7 @@
 
 Polaris is a relocation app for people moving to a new city. Instead of browsing generic neighborhood lists, users describe a place they liked living, choose what they want close by, set a budget, and get matched with neighborhoods that fit their lifestyle.
 
-The launch cities are:
+The current launch cities are:
 
 - New York City
 - Toronto

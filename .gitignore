@@ -56,3 +56,4 @@ location-research
 db-backups/
 global-bundle.pem
 *.dump
+ARCHITECTURE.md

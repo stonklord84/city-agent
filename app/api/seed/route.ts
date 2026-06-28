@@ -4,83 +4,55 @@ import { neighborhoodProfiles, cities } from "@/lib/db/schema";
 import { sql } from "drizzle-orm";
 import neighborhoodData from "@/lib/db/neighborhood_profiles.json";
 
-interface NeighborhoodInput {
-  id: string;
-  city_id: string;
-  name: string;
-  slug: string;
-  summary: string;
-  vibe_tags?: string[];
-  best_for_tags?: string[];
-  rent_min: number;
-  rent_max: number;
-  lat: number;
-  lng: number;
-  coordinates?: string;
-  walkability?: number;
-  transit?: number;
-  nightlife?: number;
-  safety?: number;
-  cafes?: number;
-  parks?: number;
-  young_professionals?: number;
-  affordability?: number;
-  diversity?: number;
-  places?: unknown;
-  commute_estimates?: unknown;
-  llm_profile?: unknown;
-  external_metrics?: unknown;
-  data_sources?: unknown;
-  data_source?: string;
-}
+// Force this route to allow up to 60 seconds execution if you are on a Vercel Pro plan
+// (Leave it in anyway, it helps hint to Vercel's infrastructure)
+export const maxDuration = 60; 
 
 export async function POST() {
-  console.log("🌱 Starting safe database sync...");
+  console.log("🌱 Starting clean, batch-optimized database sync...");
 
   try {
-    // 1. Fetch real city IDs currently assigned in your live database
     const dbCities = await db.select().from(cities);
     
-    // Map them into a slug lookup map (e.g., { "toronto": "real-uuid-abc", "new-york": "real-uuid-xyz" })
-    const cityLookup = dbCities.reduce((acc, c) => {
-      acc[c.slug.toLowerCase()] = c.id;
+    const liveCityLookup = dbCities.reduce((acc, c) => {
+      acc[c.name.toLowerCase().trim()] = c.id;
+      acc[c.slug.toLowerCase().trim()] = c.id;
       return acc;
     }, {} as Record<string, string>);
 
-    // Typecast the JSON array to use our interface format safely
-    const typedData = neighborhoodData as NeighborhoodInput[];
-    console.log(`⏳ Mapping and parsing ${typedData.length} entries...`);
+    const cityAliasMap: Record<string, string> = {
+      "new-york": "new york city",
+      "new_york": "new york city",
+      "nyc": "new york city",
+      "ny": "new york city"
+    };
 
-    const processed = typedData.map((n: NeighborhoodInput) => {
-      // Determine target city by analyzing the hardcoded context
-      let citySlug = "toronto";
-      const normalizedSummary = (n.summary || "").toLowerCase();
-      const normalizedSlug = (n.slug || "").toLowerCase();
+    const rawData = neighborhoodData as any[];
+    
+    const processed = rawData.map((n) => {
+      const rawCityIdentifier = (n.city_slug || n.city || n.city_name || "").toLowerCase().trim();
+      const resolvedKey = cityAliasMap[rawCityIdentifier] || rawCityIdentifier;
+      const realCityId = liveCityLookup[resolvedKey];
 
-      if (normalizedSlug.includes("ny") || normalizedSummary.includes("new york") || n.name === "Jersey City") {
-        citySlug = "new-york";
-      } else if (normalizedSlug.includes("mumbai") || normalizedSummary.includes("mumbai")) {
-        citySlug = "mumbai";
-      }
-
-      // Fetch the real live foreign key from Aurora
-      const realCityId = cityLookup[citySlug];
       if (!realCityId) {
-        throw new Error(`Database is missing a city record for slug: ${citySlug}`);
+        return null;
       }
+
+      const parsedLat = Number(n.lat || 0);
+      const parsedLng = Number(n.lng || 0);
 
       return {
-        id: n.id,
-        cityId: realCityId, // Drizzle expects camelCase for schema insertion values
+        id: n.id || undefined, 
+        cityId: realCityId,
         name: n.name,
-        slug: n.slug,
-        summary: n.summary,
+        slug: n.slug.toLowerCase().trim(),
+        summary: n.summary || "",
         vibeTags: n.vibe_tags || [],
         bestForTags: n.best_for_tags || [],
-        rentMin: Number(n.rent_min),
-        rentMax: Number(n.rent_max),
-        lat: Number(n.lat),
-        lng: Number(n.lng),
+        rentMin: Math.floor(Number(n.rent_min || 0)),
+        rentMax: Math.floor(Number(n.rent_max || 0)),
+        lat: parsedLat,
+        lng: parsedLng,
         walkability: n.walkability ?? 0.5,
         transit: n.transit ?? 0.5,
         nightlife: n.nightlife ?? 0.5,
@@ -96,35 +68,46 @@ export async function POST() {
         externalMetrics: n.external_metrics ? JSON.stringify(n.external_metrics) : "{}",
         dataSources: n.data_sources ? JSON.stringify(n.data_sources) : "{}",
         dataSource: n.data_source || "seeded",
-        coordinates: sql`ST_GeographyFromText(${n.coordinates || `POINT(${n.lng} ${n.lat})`})`,
+        coordinates: sql`ST_GeographyFromText(${n.coordinates || `POINT(${parsedLng} ${parsedLat})`})`,
       };
-    });
+    }).filter(Boolean);
 
-    // 2. Perform upsert statement using Drizzle camelCase schema keys
-    await db
-      .insert(neighborhoodProfiles)
-      .values(processed as unknown as typeof neighborhoodProfiles.$inferInsert[])
-      .onConflictDoUpdate({
-        target: [neighborhoodProfiles.id],
-        set: {
-          cityId: sql`EXCLUDED.city_id`,
-          name: sql`EXCLUDED.name`,
-          slug: sql`EXCLUDED.slug`,
-          summary: sql`EXCLUDED.summary`,
-          rentMin: sql`EXCLUDED.rent_min`,
-          rentMax: sql`EXCLUDED.rent_max`,
-          coordinates: sql`EXCLUDED.coordinates`,
-          places: sql`EXCLUDED.places`,
-          updatedAt: sql`now()`,
-        },
-      });
+    if (processed.length === 0) {
+      return NextResponse.json({ success: true, count: 0, message: "No compatible records found." });
+    }
 
-    console.log("✅ Database successfully synced!");
+    // BREAK INTO BATCHES OF 50 TO PREVENT VERCEL TIMEOUTS
+    const chunkSize = 50;
+    let insertedCount = 0;
+
+    for (let i = 0; i < processed.length; i += chunkSize) {
+      const chunk = processed.slice(i, i + chunkSize);
+      
+      await db
+        .insert(neighborhoodProfiles)
+        .values(chunk as any)
+        .onConflictDoUpdate({
+          target: [neighborhoodProfiles.cityId, neighborhoodProfiles.slug],
+          set: {
+            name: sql`EXCLUDED.name`,
+            summary: sql`EXCLUDED.summary`,
+            rentMin: sql`EXCLUDED.rent_min`,
+            rentMax: sql`EXCLUDED.rent_max`,
+            coordinates: sql`EXCLUDED.coordinates`,
+            places: sql`EXCLUDED.places`,
+            updatedAt: sql`now()`,
+          },
+        });
+      
+      insertedCount += chunk.length;
+      console.log(`⏳ Progress: Synced ${insertedCount}/${processed.length} rows...`);
+    }
+
+    console.log(`✅ Sync complete. Successfully processed ${processed.length} entries.`);
     return NextResponse.json({ success: true, count: processed.length });
 
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("❌ Sync failed:", errorMessage);
-    return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
+  } catch (error: any) {
+    console.error("❌ Sync failed:", error.message);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

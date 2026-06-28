@@ -47,9 +47,11 @@ export async function POST() {
       return acc;
     }, {} as Record<string, string>);
 
-    console.log(`⏳ Mapping and parsing ${neighborhoodData.length} entries...`);
+    // Typecast the JSON array to use our interface format safely
+    const typedData = neighborhoodData as NeighborhoodInput[];
+    console.log(`⏳ Mapping and parsing ${typedData.length} entries...`);
 
-    const processed = neighborhoodData.map((n: any) => {
+    const processed = typedData.map((n: NeighborhoodInput) => {
       // Determine target city by analyzing the hardcoded context
       let citySlug = "toronto";
       const normalizedSummary = (n.summary || "").toLowerCase();

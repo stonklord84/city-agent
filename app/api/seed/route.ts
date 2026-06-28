@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/client"; 
-import { neighborhoodProfiles, cities } from "@/lib/db/schema";
+import { neighborhoodProfiles } from "@/lib/db/schema";
 import { sql } from "drizzle-orm";
 import neighborhoodData from "@/lib/db/neighborhood_profiles.json";
 
@@ -9,37 +9,11 @@ export const maxDuration = 60;
 
 export async function POST() {
   try {
-    // Get your live database cities
-    const dbCities = await db.select().from(cities);
-    
-    // Find your real UUIDs by checking their unique slugs
-    const torontoUuid = dbCities.find(c => c.slug.toLowerCase().includes("toronto"))?.id;
-    const mumbaiUuid = dbCities.find(c => c.slug.toLowerCase().includes("mumbai"))?.id;
-    const nycUuid = dbCities.find(c => c.slug.toLowerCase().includes("nyc") || c.slug.toLowerCase().includes("new-york"))?.id;
-
     const rawData = neighborhoodData as any[];
     
     const processed = rawData.map((n) => {
-      let realCityId = null;
-
-      // 1. First priority: Check explicit string values in the JSON fields
-      const rawCityText = ((n.city_name || n.city || n.city_slug || "") as string).toLowerCase();
-      
-      if (rawCityText.includes("toronto")) {
-        realCityId = torontoUuid;
-      } else if (rawCityText.includes("mumbai")) {
-        realCityId = mumbaiUuid;
-      } else if (rawCityText.includes("nyc") || rawCityText.includes("new-york") || n.slug.includes("jersey") || n.slug.includes("chelsea") || n.slug.includes("williamsburg") || n.slug.includes("astoria") || n.slug.includes("bushwick") || n.slug.includes("harlem") || n.slug.includes("greenpoint") || n.slug.includes("sunnyside")) {
-        realCityId = nycUuid;
-      } else {
-        // 2. Secondary fallback: If text flags aren't there, check the raw teammate UUID values
-        const incomingUuid = n.city_id;
-        if (incomingUuid === "ee2cafe6-491a-449f-9da8-ece7fbf60b59") {
-          realCityId = nycUuid;
-        }
-      }
-
-      if (!realCityId) return null;
+      // 1. Skip if the record doesn't provide a city reference at all
+      if (!n.city_id) return null;
 
       const parsedLat = Number(n.lat || 0);
       const parsedLng = Number(n.lng || 0);
@@ -47,9 +21,10 @@ export async function POST() {
       let maxRent = Math.floor(Number(n.rent_max || 0));
       if (maxRent < minRent) maxRent = minRent;
 
+      // 2. Direct 1:1 mapping straight from the JSON file to your database structure
       return {
         id: n.id || undefined, 
-        cityId: realCityId,
+        cityId: n.city_id, // Safely maps directly to your aligned Aurora city IDs
         name: n.name,
         slug: n.slug.toLowerCase().trim(),
         summary: n.summary || "",
@@ -82,6 +57,7 @@ export async function POST() {
       return NextResponse.json({ success: true, count: 0 });
     }
 
+    // 3. Batch insert everything in chunks of 50
     const chunkSize = 50;
     for (let i = 0; i < processed.length; i += chunkSize) {
       const chunk = processed.slice(i, i + chunkSize);

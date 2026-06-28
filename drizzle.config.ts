@@ -8,6 +8,7 @@ export default defineConfig({
   schema: "./lib/db/schema.ts",
   out: "./drizzle",
   dialect: "postgresql",
+  tablesFilter: ["!spatial_ref_sys", "!geography_columns"],
   dbCredentials: {
     url: process.env.DATABASE_URL ?? "",
   },
